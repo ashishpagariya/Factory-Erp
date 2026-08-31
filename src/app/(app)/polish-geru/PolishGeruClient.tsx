@@ -7,18 +7,25 @@ import { Button } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
 import type { PolishRecord, GeruRecord } from "@/lib/types";
 
-export function JobPicker({ jobs, current }: { jobs: { id: string; karigars?: { name: string }; wip: number }[]; current: string | null }) {
+type JobPickerKarigars = { name: string } | { name: string }[] | null | undefined;
+function karigarName(k: JobPickerKarigars): string {
+  if (!k) return "—";
+  return Array.isArray(k) ? (k[0]?.name ?? "—") : (k.name ?? "—");
+}
+type JobPickerJob = { id: string; karigars?: JobPickerKarigars; wip: number };
+
+export function JobPicker({ jobs, current }: { jobs: JobPickerJob[]; current: string | null }) {
   const router = useRouter();
   return (
     <select
       value={current ?? ""}
-      onChange={(e) => router.push(`/polish-geru?job=${e.target.value}`)}
+      onChange={(e) => router.push(/polish-geru?job=${e.target.value})}
       className="max-w-[380px]"
     >
       {jobs.length === 0 && <option>No open Job Cards</option>}
       {jobs.map((j) => (
         <option key={j.id} value={j.id}>
-          {j.id} — {j.karigars?.name} (WIP {g(j.wip)})
+          {j.id} — {karigarName(j.karigars)} (WIP {g(j.wip)})
         </option>
       ))}
     </select>
