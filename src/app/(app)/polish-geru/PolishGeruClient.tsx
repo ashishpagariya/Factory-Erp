@@ -19,7 +19,7 @@ export function JobPicker({ jobs, current }: { jobs: JobPickerJob[]; current: st
   return (
     <select
       value={current ?? ""}
-      onChange={(e) => router.push(/polish-geru?job=${e.target.value})}
+      onChange={(e) => router.push("/polish-geru?job=" + e.target.value)}
       className="max-w-[380px]"
     >
       {jobs.length === 0 && <option>No open Job Cards</option>}
