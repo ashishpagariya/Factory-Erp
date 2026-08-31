@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
 import type { PolishRecord, GeruRecord } from "@/lib/types";
 
-type JobPickerKarigars = { name: string } | { name: string }[] | null | undefined;
-function karigarName(k: JobPickerKarigars): string {
+function karigarName(k: any): string {
   if (!k) return "—";
-  return Array.isArray(k) ? (k[0]?.name ?? "—") : (k.name ?? "—");
+  if (Array.isArray(k)) return k[0]?.name ?? "—";
+  return k.name ?? "—";
 }
-type JobPickerJob = { id: string; karigars?: JobPickerKarigars; wip: number };
+type JobPickerJob = { id: string; karigars?: any; wip: number };
 
 export function JobPicker({ jobs, current }: { jobs: JobPickerJob[]; current: string | null }) {
   const router = useRouter();
