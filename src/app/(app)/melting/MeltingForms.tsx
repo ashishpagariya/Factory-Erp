@@ -12,6 +12,7 @@ export function MeltingForms({ factoryBin }: { factoryBin: Record<string, number
   const remeltMats = MATERIALS.filter((m) => ["DYE", "KDM", "BALLS", "CHAIN"].includes(m.id));
 
   const [bMat, setBMat] = useState(bullionMats[0].id);
+  const [bPurity, setBPurity] = useState("99.90");
   const [bWeight, setBWeight] = useState("");
   const [bActual, setBActual] = useState("");
   const [rMat, setRMat] = useState(remeltMats[0].id);
@@ -22,19 +23,19 @@ export function MeltingForms({ factoryBin }: { factoryBin: Record<string, number
   const router = useRouter();
 
   const preview = useMemo(() => {
-    const m = MAT(bMat)!;
     const w = parseFloat(bWeight);
-    if (!w || w <= 0) return null;
-    const fineIn = Math.round(w * m.purity! * 100) / 10000;
+    const p = parseFloat(bPurity);
+    if (!w || w <= 0 || !p || p <= 0) return null;
+    const fineIn = Math.round(w * p * 100) / 10000;
     const expected = Math.round((fineIn / 0.917) * 10000) / 10000;
     const alloy = Math.round((expected - w) * 10000) / 10000;
     return { fineIn, expected, alloy };
-  }, [bMat, bWeight]);
+  }, [bWeight, bPurity]);
 
   async function submitMelt() {
     setPending(true);
     try {
-      const res = await meltBullion(bMat, parseFloat(bWeight), parseFloat(bActual));
+      const res = await meltBullion(bMat, parseFloat(bWeight), parseFloat(bPurity), parseFloat(bActual));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
         setBWeight("");
@@ -72,12 +73,21 @@ export function MeltingForms({ factoryBin }: { factoryBin: Record<string, number
             ))}
           </select>
         </Field>
-        <Field label="Input Weight (g)">
-          <input type="number" step="0.001" value={bWeight} onChange={(e) => setBWeight(e.target.value)} placeholder="e.g. 100.000" />
-        </Field>
+        <div className="flex gap-2.5">
+          <div className="flex-1">
+            <Field label="Input Weight (g)">
+              <input type="number" step="0.001" value={bWeight} onChange={(e) => setBWeight(e.target.value)} placeholder="e.g. 100.000" />
+            </Field>
+          </div>
+          <div className="flex-1">
+            <Field label="Actual Purity (%)">
+              <input type="number" step="0.01" min={0.01} max={100} value={bPurity} onChange={(e) => setBPurity(e.target.value)} placeholder="e.g. 99.90" />
+            </Field>
+          </div>
+        </div>
         <Formula>
           {preview
-            ? `Fine input = ${bWeight} × ${MAT(bMat)!.purity}% = ${g(preview.fineIn)}\nExpected 91.7 output = ${g(preview.fineIn)} ÷ 0.917 = ${g(preview.expected)}\nAuto alloy required = ${g(preview.expected)} − ${g(parseFloat(bWeight))} = ${g(preview.alloy)}`
+            ? `Fine input = ${bWeight} × ${bPurity}% = ${g(preview.fineIn)}\nExpected 91.7 output = ${g(preview.fineIn)} ÷ 0.917 = ${g(preview.expected)}\nAuto alloy required = ${g(preview.expected)} − ${g(parseFloat(bWeight))} = ${g(preview.alloy)}`
             : "Fine input = —\nExpected 91.7 output = —\nAuto alloy required = —"}
         </Formula>
         <div className="mt-3">
@@ -88,7 +98,9 @@ export function MeltingForms({ factoryBin }: { factoryBin: Record<string, number
         <Button variant="gold" className="w-full" disabled={pending} onClick={submitMelt}>
           Post Melt
         </Button>
-        <div className="text-[11px] text-text-faint mt-2">Alloy Bin available: {g(factoryBin["ALLOY"] ?? 0)}.</div>
+        <div className="text-[11px] text-text-faint mt-2">
+          Enter the actual purity of this batch — it doesn&apos;t need to match the SKU&apos;s nominal purity. Alloy Bin available: {g(factoryBin["ALLOY"] ?? 0)}.
+        </div>
       </div>
       <div>
         <Field label="Source Material">

@@ -5,7 +5,12 @@ import type { ActionResult } from "@/lib/types";
 
 const CAN_MELT = ["Owner / Admin", "Factory Manager", "Supervisor"] as const;
 
-export async function meltBullion(materialId: string, inputWeight: number, actualOutput: number): Promise<ActionResult> {
+export async function meltBullion(
+  materialId: string,
+  inputWeight: number,
+  inputPurity: number,
+  actualOutput: number
+): Promise<ActionResult> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, [...CAN_MELT]);
   if (denied) return denied;
@@ -13,6 +18,7 @@ export async function meltBullion(materialId: string, inputWeight: number, actua
   const { data, error } = await supabase.rpc("fn_melt_bullion", {
     p_material_id: materialId,
     p_input_weight: inputWeight,
+    p_input_purity: inputPurity,
     p_actual_output: actualOutput,
     p_user: userId,
   });
