@@ -9,7 +9,7 @@ export async function actionContext() {
   return { supabase, userId: user.id, role: (profile?.role as Role) ?? null };
 }
 
-export function requireRole<T>(role: Role | null, allowed: Role[] | "ALL"): ActionResult<T> | null {
+export function requireRole(role: Role | null, allowed: Role[] | "ALL"): ActionResult<any> | null {
   if (!role) return { ok: false, message: "You must be signed in." };
   if (allowed === "ALL") return null;
   if (allowed.includes(role)) return null;
