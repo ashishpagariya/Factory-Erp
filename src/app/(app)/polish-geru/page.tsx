@@ -35,7 +35,7 @@ export default async function PolishGeruPage({ searchParams }: { searchParams: P
         original open ID.
       </p>
       <div className="mb-4">
-        <JobPicker jobs={jobsWithWip} current={jobId} />
+        <JobPicker jobs={jobsWithWip as any} current={jobId} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
         <Card>
