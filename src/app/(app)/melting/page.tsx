@@ -1,6 +1,6 @@
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { canAccess } from "@/lib/constants";
+import { canAccess, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag } from "@/components/ui/primitives";
 import { MeltingForms } from "./MeltingForms";
@@ -12,13 +12,20 @@ export default async function MeltingPage() {
   if (!canAccess(profile.role, "/melting")) return <AccessDenied role={profile.role} />;
 
   const supabase = await createClient();
-  const [{ data: balances }, { data: melts }] = await Promise.all([
+  const bullionMats = MATERIALS.filter((m) => m.category === "Bullion");
+  const [{ data: balances }, { data: melts }, ...purityResults] = await Promise.all([
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.from("melts").select("*").order("created_at", { ascending: false }).limit(8),
+    ...bullionMats.map((m) => supabase.rpc("fn_bin_avg_purity", { p_material_id: m.id })),
   ]);
 
   const factoryBin: Record<string, number> = {};
   (balances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
+
+  const avgPurity: Record<string, number | null> = {};
+  bullionMats.forEach((m, i) => {
+    avgPurity[m.id] = purityResults[i]?.data ?? null;
+  });
 
   return (
     <div>
@@ -31,7 +38,7 @@ export default async function MeltingPage() {
       </p>
 
       <Card className="mb-4">
-        <MeltingForms factoryBin={factoryBin} />
+        <MeltingForms factoryBin={factoryBin} avgPurity={avgPurity} />
       </Card>
 
       <Card>

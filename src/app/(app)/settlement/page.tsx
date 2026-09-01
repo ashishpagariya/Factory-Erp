@@ -35,7 +35,19 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
 
   const job = openJobs!.find((j) => j.id === jobId)!;
   const [{ data: settlement }, { data: openPolish }, { data: openGeru }, { data: openSetting }, { data: dhodiReturns }] = await Promise.all([
-    supabase.rpc("fn_compute_settlement", { p_job_id: jobId }),
+    supabase.rpc("fn_compute_settlement",   const [{ data: issueRows }, { data: returnRows }] = await Promise.all([
+    supabase.from("job_issues").select("*").eq("job_id", jobId).order("created_at"),
+    supabase.from("job_returns").select("*").eq("job_id", jobId).order("created_at"),
+  ]);
+  const issuesAndReturns = [
+    ...(issueRows ?? []).map((r) => ({ kind: "Issued" as const, material: r.material_id, weight: r.weight, ts: r.created_at })),
+    ...(returnRows ?? []).map((r) => ({
+      kind: "Received" as const,
+      material: r.return_type === "Dhodi" ? `Dhodi (${r.pieces} pcs, net)` : r.material_id,
+      weight: r.return_type === "Dhodi" ? r.net : r.weight,
+      ts: r.created_at,
+    })),
+  ].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime()); { p_job_id: jobId }),
     supabase.from("polish_records").select("id", { count: "exact" }).eq("job_id", jobId).eq("status", "Open"),
     supabase.from("geru_records").select("id", { count: "exact" }).eq("job_id", jobId).eq("status", "Open"),
     supabase.from("setting_records").select("id", { count: "exact" }).eq("job_id", jobId).eq("status", "Open"),
@@ -121,6 +133,40 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
           <ConfirmSettlementButton jobId={jobId} disabled={gates.length > 0} />
           {gates.length > 0 && <span className="text-[11px] text-text-faint">Resolve the gate checks above to enable settlement.</span>}
         </div>
+            <Card className="mt-4">
+        <CardTitle>Materials Issued vs Received — {jobId}</CardTitle>
+        <div className="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Material</th>
+                <th className="text-right">Weight</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {issuesAndReturns.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center text-text-faint italic py-6">
+                    Nothing posted on this job yet.
+                  </td>
+                </tr>
+              )}
+              {issuesAndReturns.map((row, i) => (
+                <tr key={i}>
+                  <td>
+                    <span className={row.kind === "Issued" ? "text-amber" : "text-green"}>{row.kind}</span>
+                  </td>
+                  <td>{row.material}</td>
+                  <td className="num-cell">{g(row.weight)}</td>
+                  <td className="text-[11px] text-text-faint">{new Date(row.ts).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
       </Card>
     </div>
   );
