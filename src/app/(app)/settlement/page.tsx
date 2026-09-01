@@ -34,24 +34,22 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
   }
 
   const job = openJobs!.find((j) => j.id === jobId)!;
-  const [{ data: settlement }, { data: openPolish }, { data: openGeru }, { data: openSetting }, { data: dhodiReturns }] = await Promise.all([
-    supabase.rpc("fn_compute_settlement",   const [{ data: issueRows }, { data: returnRows }] = await Promise.all([
-    supabase.from("job_issues").select("*").eq("job_id", jobId).order("created_at"),
-    supabase.from("job_returns").select("*").eq("job_id", jobId).order("created_at"),
-  ]);
-  const issuesAndReturns = [
-    ...(issueRows ?? []).map((r) => ({ kind: "Issued" as const, material: r.material_id, weight: r.weight, ts: r.created_at })),
-    ...(returnRows ?? []).map((r) => ({
-      kind: "Received" as const,
-      material: r.return_type === "Dhodi" ? `Dhodi (${r.pieces} pcs, net)` : r.material_id,
-      weight: r.return_type === "Dhodi" ? r.net : r.weight,
-      ts: r.created_at,
-    })),
-  ].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime()); { p_job_id: jobId }),
+  const [
+    { data: settlement },
+    { data: openPolish },
+    { data: openGeru },
+    { data: openSetting },
+    { data: dhodiReturns },
+    { data: issueRows },
+    { data: returnRows },
+  ] = await Promise.all([
+    supabase.rpc("fn_compute_settlement", { p_job_id: jobId }),
     supabase.from("polish_records").select("id", { count: "exact" }).eq("job_id", jobId).eq("status", "Open"),
     supabase.from("geru_records").select("id", { count: "exact" }).eq("job_id", jobId).eq("status", "Open"),
     supabase.from("setting_records").select("id", { count: "exact" }).eq("job_id", jobId).eq("status", "Open"),
     supabase.from("job_returns").select("id", { count: "exact" }).eq("job_id", jobId).eq("return_type", "Dhodi"),
+    supabase.from("job_issues").select("*").eq("job_id", jobId).order("created_at"),
+    supabase.from("job_returns").select("*").eq("job_id", jobId).order("created_at"),
   ]);
 
   const s = settlement as Settlement;
@@ -60,6 +58,16 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
   if ((openGeru ?? []).length) gates.push("Open Geru ID exists.");
   if ((openSetting ?? []).length) gates.push("Open Setting ID exists.");
   if (!(dhodiReturns ?? []).length) gates.push("No Dhodi has been received yet.");
+
+  const issuesAndReturns = [
+    ...(issueRows ?? []).map((r) => ({ kind: "Issued" as const, material: r.material_id, weight: r.weight, ts: r.created_at })),
+    ...(returnRows ?? []).map((r) => ({
+      kind: "Received" as const,
+      material: r.return_type === "Dhodi" ? `Dhodi (${r.pieces} pcs, net)` : r.material_id,
+      weight: r.return_type === "Dhodi" ? r.net : r.weight,
+      ts: r.created_at,
+    })),
+  ].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
 
   return (
     <div>
@@ -72,7 +80,7 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
         Manufacturing Materials get wastage.
       </p>
       <div className="mb-4">
-       <JobPicker jobs={jobsWithWip as any} current={jobId} />
+        <JobPicker jobs={jobsWithWip as any} current={jobId} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
@@ -98,7 +106,7 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
         </Card>
       </div>
 
-      <Card>
+      <Card className="mb-4">
         <CardTitle tag={<Tag kind="control">Control</Tag>}>Settlement Preview</CardTitle>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
           <div className="bg-surface2 border border-border rounded-lg p-3">
@@ -133,7 +141,9 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
           <ConfirmSettlementButton jobId={jobId} disabled={gates.length > 0} />
           {gates.length > 0 && <span className="text-[11px] text-text-faint">Resolve the gate checks above to enable settlement.</span>}
         </div>
-            <Card className="mt-4">
+      </Card>
+
+      <Card>
         <CardTitle>Materials Issued vs Received — {jobId}</CardTitle>
         <div className="overflow-x-auto">
           <table>
@@ -166,7 +176,6 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
             </tbody>
           </table>
         </div>
-      </Card>
       </Card>
     </div>
   );
