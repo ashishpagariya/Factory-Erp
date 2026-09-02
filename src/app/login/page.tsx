@@ -1,4 +1,4 @@
-import { signIn, signUp } from "./actions";
+import { signIn } from "./actions";
 
 export default async function LoginPage({
   searchParams,
@@ -31,7 +31,7 @@ export default async function LoginPage({
           </div>
         )}
 
-        <form action={signIn} className="bg-surface border border-border rounded-xl p-5 mb-4">
+        <form action={signIn} className="bg-surface border border-border rounded-xl p-5">
           <h2 className="text-[13px] font-bold text-text-dim uppercase tracking-wide mb-4">Sign in</h2>
           <label className="block text-[11.5px] text-text-dim mb-1.5 font-semibold">Email</label>
           <input name="email" type="email" required className="mb-3" placeholder="you@jjjjewellers.com" />
@@ -45,25 +45,9 @@ export default async function LoginPage({
           </button>
         </form>
 
-        <details className="bg-surface border border-border rounded-xl p-5">
-          <summary className="text-[13px] font-bold text-text-dim uppercase tracking-wide cursor-pointer">
-            Create an account
-          </summary>
-          <form action={signUp} className="mt-4">
-            <label className="block text-[11.5px] text-text-dim mb-1.5 font-semibold">Full name</label>
-            <input name="full_name" type="text" required className="mb-3" placeholder="Suresh Kumar" />
-            <label className="block text-[11.5px] text-text-dim mb-1.5 font-semibold">Email</label>
-            <input name="email" type="email" required className="mb-3" placeholder="you@jjjjewellers.com" />
-            <label className="block text-[11.5px] text-text-dim mb-1.5 font-semibold">Password</label>
-            <input name="password" type="password" required minLength={6} className="mb-4" placeholder="At least 6 characters" />
-            <button type="submit" className="w-full rounded-md bg-surface3 border border-border py-2.5 text-[13px] font-medium">
-              Create account
-            </button>
-            <p className="text-[11px] text-text-faint mt-3">
-              New accounts default to the Factory Manager role. An Owner/Admin can change roles from Supabase — see the README.
-            </p>
-          </form>
-        </details>
+        <p className="text-[11px] text-text-faint mt-4 text-center">
+          Accounts are created by an Administrator, not self-registered. Contact your Admin for access.
+        </p>
       </div>
     </div>
   );

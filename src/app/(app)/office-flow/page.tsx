@@ -13,14 +13,7 @@ export default async function OfficeFlowPage() {
   if (!canAccess(profile.role, "/office-flow")) return <AccessDenied role={profile.role} />;
 
   const supabase = await createClient();
-  const [{ data: dispatches }, { data: balances }] = await Promise.all([
-    supabase.from("office_dispatches").select("*").order("created_at", { ascending: false }).limit(5),
-    supabase.from("balances").select("*").eq("location", "OfficeStock"),
-  ]);
-
-  const officeStock: Record<string, number> = {};
-  (balances ?? []).forEach((b) => (officeStock[b.material_id] = Number(b.weight)));
-
+ const { data: dispatches } = await supabase.from("office_dispatches").select("*").order("created_at", { ascending: false }).limit(5);
   return (
     <div>
       <div className="flex items-baseline gap-3 flex-wrap mb-1">
@@ -37,7 +30,7 @@ export default async function OfficeFlowPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
         <Card>
           <CardTitle tag={<Tag kind="must">Must</Tag>}>Create Dispatch</CardTitle>
-          <OfficeDispatchForm officeStock={officeStock} />
+         <OfficeDispatchForm />
         </Card>
         <Card>
           <CardTitle tag={<Tag kind="control">Control</Tag>}>What Must Be Blocked</CardTitle>

@@ -89,3 +89,14 @@ export async function settleJobAndRedirect(jobId: string) {
   const res = await settleJobAction(jobId);
   if (res.ok) redirect(`/karigar-job/${res.data!.newJobId}`);
 }
+
+export async function updateJobDescription(jobId: string, description: string): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_WORK_JOB]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_update_job_description", { p_job_id: jobId, p_description: description, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath(`/karigar-job/${jobId}`);
+  revalidatePath("/karigar-job");
+  return { ok: true, message: "Description saved." };
+}

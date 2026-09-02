@@ -51,13 +51,14 @@ export default async function KarigarJobPage() {
                   <th className="text-right">Wastage %</th>
                   <th className="text-right">Issued</th>
                   <th className="text-right">Received</th>
+                  <th>Description</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {(openJobs ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center text-text-faint italic py-6">
+                    <td colSpan={7} className="text-center text-text-faint italic py-6">
                       No open Job Cards.
                     </td>
                   </tr>
@@ -75,6 +76,7 @@ export default async function KarigarJobPage() {
                       <td className="num-cell">{pct(j.wastage_pct)}</td>
                       <td className="num-cell">{s ? g(s.totalIssued) : "—"}</td>
                       <td className="num-cell">{s ? g(s.totalReceived) : "—"}</td>
+                      <td className="text-[11.5px] text-text-dim max-w-[180px] truncate">{j.description || "—"}</td>
                       <td>
                         <Badge kind="open">Open</Badge>
                       </td>
@@ -101,12 +103,13 @@ export default async function KarigarJobPage() {
               <th>Status</th>
               <th className="text-right">Saving</th>
               <th className="text-right">Loss</th>
+              <th>Description</th>
             </tr>
           </thead>
           <tbody>
             {(closedJobs ?? []).length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center text-text-faint italic py-6">
+                <td colSpan={6} className="text-center text-text-faint italic py-6">
                   No settled jobs yet.
                 </td>
               </tr>
@@ -124,6 +127,7 @@ export default async function KarigarJobPage() {
                 </td>
                 <td className="num-cell text-green">{j.settlement && j.settlement.saving > 0 ? g(j.settlement.saving) : "—"}</td>
                 <td className="num-cell text-red">{j.settlement && j.settlement.loss > 0 ? g(j.settlement.loss) : "—"}</td>
+                <td className="text-[11.5px] text-text-dim max-w-[180px] truncate">{j.description || "—"}</td>
               </tr>
             ))}
           </tbody>

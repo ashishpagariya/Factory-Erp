@@ -3,8 +3,9 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { canAccess, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
-import { Card, CardTitle, Tag, Badge } from "@/components/ui/primitives";
+import { Card, Tag, Badge } from "@/components/ui/primitives";
 import { StockTakeForm, ApproveStockTakeButton } from "./ReportsClient";
+import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { g, pct } from "@/lib/format";
 import type { LedgerRow, JobCard, Melt, PolishRecord, GeruRecord, StockTake, Tag as TagRow, Settlement } from "@/lib/types";
 
@@ -21,12 +22,22 @@ const TABS: [string, string][] = [
   ["stocktake", "Stock Take"],
 ];
 
-export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+function TabHeader({ title, isAdmin, exportData, filename }: { title: string; isAdmin: boolean; exportData: Record<string, unknown>[]; filename: string }) {
+  return (
+    <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+      <h3 className="text-[12.5px] uppercase tracking-wide text-text-dim font-bold">{title}</h3>
+      {isAdmin && <ExportExcelButton data={exportData} filename={filename} />}
+    </div>
+  );
+}
+
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ tab?: string; sort?: string; dir?: string }> }) {
   const { profile } = await requireProfile();
   if (!canAccess(profile.role, "/reports")) return <AccessDenied role={profile.role} />;
-  const { tab: tabParam } = await searchParams;
+  const { tab: tabParam, sort, dir } = await searchParams;
   const tab = tabParam ?? "ledger";
   const supabase = await createClient();
+  const isAdmin = profile.role === "Owner / Admin";
 
   return (
     <div>
@@ -51,45 +62,92 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         ))}
       </div>
 
-      {tab === "ledger" && <LedgerTab supabase={supabase} />}
-      {tab === "material" && <MaterialTab supabase={supabase} />}
-      {tab === "karigar" && <KarigarTab supabase={supabase} />}
-      {tab === "openjobs" && <OpenJobsTab supabase={supabase} />}
-      {tab === "meltloss" && <MeltLossTab supabase={supabase} />}
-      {tab === "polishloss" && <PolishLossTab supabase={supabase} />}
-      {tab === "geru" && <GeruTab supabase={supabase} />}
-      {tab === "transit" && <TransitTab supabase={supabase} />}
-      {tab === "finished" && <FinishedTab supabase={supabase} />}
-      {tab === "stocktake" && <StockTakeTab supabase={supabase} isAdmin={profile.role === "Owner / Admin"} />}
+      {tab === "ledger" && <LedgerTab supabase={supabase} sort={sort} dir={dir} isAdmin={isAdmin} />}
+      {tab === "material" && <MaterialTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "karigar" && <KarigarTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "openjobs" && <OpenJobsTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "meltloss" && <MeltLossTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "polishloss" && <PolishLossTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "geru" && <GeruTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "transit" && <TransitTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "finished" && <FinishedTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "stocktake" && <StockTakeTab supabase={supabase} isAdmin={isAdmin} />}
     </div>
   );
 }
 
-async function LedgerTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
-  const { data } = await supabase.from("ledger").select("*").order("ts", { ascending: false }).limit(40);
+async function LedgerTab({
+  supabase,
+  sort,
+  dir,
+  isAdmin,
+}: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  sort?: string;
+  dir?: string;
+  isAdmin: boolean;
+}) {
+  const sortCol = ["ts", "type", "gross", "fine"].includes(sort || "") ? (sort as string) : "ts";
+  const ascending = dir === "asc";
+  const { data } = await supabase.from("ledger").select("*").order(sortCol, { ascending, nullsFirst: false }).limit(200);
   const rows = (data as LedgerRow[]) ?? [];
+
+  const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];
+  const profileMap: Record<string, string> = {};
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
+    (profiles ?? []).forEach((p) => {
+      profileMap[p.id] = p.full_name || p.id.slice(0, 8);
+    });
+  }
+
+  function sortLink(col: string, label: string) {
+    const nextDir = sortCol === col && ascending ? "desc" : "asc";
+    const arrow = sortCol === col ? (ascending ? " ▲" : " ▼") : "";
+    return (
+      <Link href={`/reports?tab=ledger&sort=${col}&dir=${nextDir}`} className="hover:text-gold">
+        {label}
+        {arrow}
+      </Link>
+    );
+  }
+
+  const exportData = rows.map((l) => ({
+    Time: new Date(l.ts).toLocaleString(),
+    Type: l.type,
+    Reference: l.ref,
+    Material: l.material,
+    Gross: l.gross,
+    Purity: l.purity,
+    Fine: l.fine,
+    From: l.from_location,
+    To: l.to_location,
+    User: l.user_id ? profileMap[l.user_id] ?? l.user_id : "—",
+  }));
+
   return (
     <Card>
-      <CardTitle>Universal Transaction Ledger</CardTitle>
+      <TabHeader title="Universal Transaction Ledger" isAdmin={isAdmin} exportData={exportData} filename="universal_ledger.xlsx" />
       <div className="overflow-x-auto">
         <table>
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Type</th>
+              <th>{sortLink("ts", "Time")}</th>
+              <th>{sortLink("type", "Type")}</th>
               <th>Reference</th>
               <th>Material</th>
-              <th className="text-right">Gross</th>
+              <th className="text-right">{sortLink("gross", "Gross")}</th>
               <th className="text-right">Purity</th>
-              <th className="text-right">Fine</th>
+              <th className="text-right">{sortLink("fine", "Fine")}</th>
               <th>From</th>
               <th>To</th>
+              <th>User</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center text-text-faint italic py-6">
+                <td colSpan={10} className="text-center text-text-faint italic py-6">
                   No transactions posted yet.
                 </td>
               </tr>
@@ -105,6 +163,7 @@ async function LedgerTab({ supabase }: { supabase: Awaited<ReturnType<typeof cre
                 <td className="num-cell">{l.fine != null ? g(l.fine) : "—"}</td>
                 <td>{l.from_location ?? "—"}</td>
                 <td>{l.to_location ?? "—"}</td>
+                <td className="text-[11px]">{l.user_id ? profileMap[l.user_id] ?? l.user_id.slice(0, 8) : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -114,7 +173,7 @@ async function LedgerTab({ supabase }: { supabase: Awaited<ReturnType<typeof cre
   );
 }
 
-async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function MaterialTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const [{ data: factoryBalances }, { data: transitBalances }, { data: wipBalances }] = await Promise.all([
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.from("balances").select("*").eq("location", "Transit_O2F"),
@@ -126,9 +185,21 @@ async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
   (transitBalances ?? []).forEach((b) => (transit[b.material_id] = Number(b.weight)));
   const wipTotal = (wipBalances ?? []).reduce((s, b) => s + Number(b.weight), 0);
 
-  return (
-    <Card>
-      <CardTitle>Material Balance — Factory Bin</CardTitle>
+  const bullion = MATERIALS.filter((m) => m.category === "Bullion");
+  const semiAndMfg = MATERIALS.filter((m) => m.category === "SemiFinished" || m.category === "Manufacturing");
+  const nonGold = MATERIALS.filter((m) => m.category === "NonGold");
+
+  function rowsFor(list: typeof MATERIALS) {
+    return list.map((m) => ({
+      Material: m.name,
+      Category: m.category,
+      "Factory Bin": factoryBin[m.id] ?? 0,
+      "In Transit (O→F)": transit[m.id] ?? 0,
+    }));
+  }
+
+  function table(list: typeof MATERIALS) {
+    return (
       <table>
         <thead>
           <tr>
@@ -139,7 +210,7 @@ async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
           </tr>
         </thead>
         <tbody>
-          {MATERIALS.map((m) => (
+          {list.map((m) => (
             <tr key={m.id}>
               <td>{m.name}</td>
               <td>{m.category}</td>
@@ -149,14 +220,31 @@ async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
           ))}
         </tbody>
       </table>
-      <div className="text-[11px] text-text-faint mt-3">
-        Total gold currently with karigars (all materials combined): {g(wipTotal)}
-      </div>
-    </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <TabHeader title="Bullion" isAdmin={isAdmin} exportData={rowsFor(bullion)} filename="material_bullion.xlsx" />
+        {table(bullion)}
+      </Card>
+      <Card>
+        <TabHeader title="Semi-Finished + Manufacturing" isAdmin={isAdmin} exportData={rowsFor(semiAndMfg)} filename="material_semi_manufacturing.xlsx" />
+        {table(semiAndMfg)}
+        <div className="text-[11px] text-text-faint mt-3">
+          Total gold currently with karigars (all materials combined): {g(wipTotal)}
+        </div>
+      </Card>
+      <Card>
+        <TabHeader title="Stone + Alloy" isAdmin={isAdmin} exportData={rowsFor(nonGold)} filename="material_stone_alloy.xlsx" />
+        {table(nonGold)}
+      </Card>
+    </div>
   );
 }
 
-async function KarigarTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function KarigarTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const { data } = await supabase.from("job_cards").select("*, karigars(name)").order("created_at", { ascending: false });
   const jobs = (data as (JobCard & { karigars: { name: string } })[]) ?? [];
   const settlements = await Promise.all(
@@ -167,9 +255,23 @@ async function KarigarTab({ supabase }: { supabase: Awaited<ReturnType<typeof cr
     })
   );
 
+  const exportData = jobs.map((j, i) => {
+    const s = settlements[i];
+    return {
+      "Job Card": j.id,
+      Karigar: j.karigars?.name,
+      Status: j.status,
+      Issued: s?.totalIssued ?? null,
+      Received: s?.totalReceived ?? null,
+      Saving: s?.saving && s.saving > 0 ? s.saving : null,
+      Loss: s?.loss && s.loss > 0 ? s.loss : null,
+      Description: j.description ?? "",
+    };
+  });
+
   return (
     <Card>
-      <CardTitle>Karigar Ledger</CardTitle>
+      <TabHeader title="Karigar Ledger" isAdmin={isAdmin} exportData={exportData} filename="karigar_ledger.xlsx" />
       <div className="overflow-x-auto">
         <table>
           <thead>
@@ -181,7 +283,7 @@ async function KarigarTab({ supabase }: { supabase: Awaited<ReturnType<typeof cr
               <th className="text-right">Received</th>
               <th className="text-right">Saving</th>
               <th className="text-right">Loss</th>
-              <th>Opening Carry-fwd</th>
+              <th>Description</th>
             </tr>
           </thead>
           <tbody>
@@ -203,7 +305,7 @@ async function KarigarTab({ supabase }: { supabase: Awaited<ReturnType<typeof cr
                   <td className="num-cell">{s ? g(s.totalReceived) : "—"}</td>
                   <td className="num-cell text-green">{s && s.saving > 0 ? g(s.saving) : "—"}</td>
                   <td className="num-cell text-red">{s && s.loss > 0 ? g(s.loss) : "—"}</td>
-                  <td>{j.opening_note ?? "—"}</td>
+                  <td className="text-[11.5px] text-text-dim max-w-[180px] truncate">{j.description || "—"}</td>
                 </tr>
               );
             })}
@@ -214,14 +316,25 @@ async function KarigarTab({ supabase }: { supabase: Awaited<ReturnType<typeof cr
   );
 }
 
-async function OpenJobsTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function OpenJobsTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const { data } = await supabase.from("job_cards").select("*, karigars(name)").eq("status", "Open");
   const jobs = (data as (JobCard & { karigars: { name: string } })[]) ?? [];
   const settlements = await Promise.all(jobs.map((j) => supabase.rpc("fn_compute_settlement", { p_job_id: j.id })));
 
+  const exportData = jobs.map((j, i) => {
+    const s = settlements[i].data as Settlement;
+    return {
+      "Job Card": j.id,
+      Karigar: j.karigars?.name,
+      Issued: s.totalIssued,
+      Received: s.totalReceived,
+      Outstanding: s.totalIssued - s.totalReceived,
+    };
+  });
+
   return (
     <Card>
-      <CardTitle>Open Job Report</CardTitle>
+      <TabHeader title="Open Job Report" isAdmin={isAdmin} exportData={exportData} filename="open_job_report.xlsx" />
       <table>
         <thead>
           <tr>
@@ -258,13 +371,24 @@ async function OpenJobsTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
   );
 }
 
-async function MeltLossTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function MeltLossTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const { data } = await supabase.from("melts").select("*").order("created_at", { ascending: false });
   const melts = (data as Melt[]) ?? [];
   const total = melts.reduce((s, m) => s + m.melt_loss, 0);
+
+  const exportData = melts.map((m) => ({
+    "Melt ID": m.id,
+    Type: m.melt_type,
+    Input: m.input_material,
+    "Input Weight": m.input_weight,
+    Expected: m.expected_output,
+    Actual: m.actual_output,
+    Loss: m.melt_loss,
+  }));
+
   return (
     <Card>
-      <CardTitle>Melting Loss</CardTitle>
+      <TabHeader title="Melting Loss" isAdmin={isAdmin} exportData={exportData} filename="melting_loss.xlsx" />
       <table>
         <thead>
           <tr>
@@ -308,13 +432,22 @@ async function MeltLossTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
   );
 }
 
-async function PolishLossTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function PolishLossTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const { data } = await supabase.from("polish_records").select("*").eq("status", "Closed").order("closed_at", { ascending: false });
   const records = (data as PolishRecord[]) ?? [];
   const total = records.reduce((s, r) => s + (r.loss ?? 0), 0);
+
+  const exportData = records.map((r) => ({
+    "Polish ID": r.id,
+    "Job Card": r.job_id,
+    Issued: r.issued_gross,
+    Received: r.returned_gross,
+    Loss: r.loss,
+  }));
+
   return (
     <Card>
-      <CardTitle>Polish Loss</CardTitle>
+      <TabHeader title="Polish Loss" isAdmin={isAdmin} exportData={exportData} filename="polish_loss.xlsx" />
       <table>
         <thead>
           <tr>
@@ -356,14 +489,24 @@ async function PolishLossTab({ supabase }: { supabase: Awaited<ReturnType<typeof
   );
 }
 
-async function GeruTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function GeruTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const { data } = await supabase.from("geru_records").select("*").eq("status", "Closed").order("closed_at", { ascending: false });
   const records = (data as GeruRecord[]) ?? [];
   const totalAdded = records.filter((r) => r.direction === "Added").reduce((s, r) => s + Math.abs(r.raw_variance ?? 0), 0);
   const totalReduced = records.filter((r) => r.direction === "Reduced").reduce((s, r) => s + Math.abs(r.raw_variance ?? 0), 0);
+
+  const exportData = records.map((r) => ({
+    "Geru ID": r.id,
+    "Job Card": r.job_id,
+    Issued: r.issued_gross,
+    Returned: r.returned_gross,
+    Direction: r.direction,
+    Variance: r.raw_variance != null ? Math.abs(r.raw_variance) : null,
+  }));
+
   return (
     <Card>
-      <CardTitle>Geru</CardTitle>
+      <TabHeader title="Geru" isAdmin={isAdmin} exportData={exportData} filename="geru.xlsx" />
       <table>
         <thead>
           <tr>
@@ -408,15 +551,18 @@ async function GeruTab({ supabase }: { supabase: Awaited<ReturnType<typeof creat
   );
 }
 
-async function TransitTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function TransitTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const [{ data: o2f }, { data: f2o }] = await Promise.all([
     supabase.from("balances").select("*").eq("location", "Transit_O2F").gt("weight", 0.0005),
     supabase.from("balances").select("*").eq("location", "Transit_F2O").gt("weight", 0.0005),
   ]);
+  const o2fExport = (o2f ?? []).map((b) => ({ Material: b.material_id, Weight: Number(b.weight) }));
+  const f2oExport = (f2o ?? []).map((b) => ({ Item: b.material_id, Weight: Number(b.weight) }));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
       <Card>
-        <CardTitle>Office → Factory Transit</CardTitle>
+        <TabHeader title="Office → Factory Transit" isAdmin={isAdmin} exportData={o2fExport} filename="transit_office_to_factory.xlsx" />
         <table>
           <thead>
             <tr>
@@ -442,7 +588,7 @@ async function TransitTab({ supabase }: { supabase: Awaited<ReturnType<typeof cr
         </table>
       </Card>
       <Card>
-        <CardTitle>Factory → Office Transit</CardTitle>
+        <TabHeader title="Factory → Office Transit" isAdmin={isAdmin} exportData={f2oExport} filename="transit_factory_to_office.xlsx" />
         <table>
           <thead>
             <tr>
@@ -471,12 +617,22 @@ async function TransitTab({ supabase }: { supabase: Awaited<ReturnType<typeof cr
   );
 }
 
-async function FinishedTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+async function FinishedTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
   const { data } = await supabase.from("tags").select("*").order("created_at", { ascending: false });
   const tags = (data as TagRow[]) ?? [];
+
+  const exportData = tags.map((t) => ({
+    "Tag No": t.tag_no,
+    Job: t.job_id,
+    Pieces: t.pieces,
+    Gross: t.gross,
+    Net: t.net,
+    Dispatch: t.dispatch_status,
+  }));
+
   return (
     <Card>
-      <CardTitle>Finished / Tagged</CardTitle>
+      <TabHeader title="Finished / Tagged" isAdmin={isAdmin} exportData={exportData} filename="finished_tagged.xlsx" />
       <table>
         <thead>
           <tr>
@@ -525,9 +681,19 @@ async function StockTakeTab({ supabase, isAdmin }: { supabase: Awaited<ReturnTyp
   (balances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
   const takesRows = (takes as StockTake[]) ?? [];
 
+  const exportData = takesRows.map((s) => ({
+    ID: s.id,
+    Material: s.material_id,
+    System: s.system_weight,
+    Physical: s.physical_weight,
+    Variance: s.variance,
+    Status: s.status,
+    Reason: s.reason ?? "",
+  }));
+
   return (
     <Card>
-      <CardTitle>Physical Stock Take</CardTitle>
+      <TabHeader title="Physical Stock Take" isAdmin={isAdmin} exportData={exportData} filename="stock_take.xlsx" />
       <StockTakeForm materials={MATERIALS} factoryBin={factoryBin} />
       <div className="text-[11px] text-text-faint mb-3">
         Count does not directly overwrite stock. Variance requires a reason and Admin approval before any adjustment posts.

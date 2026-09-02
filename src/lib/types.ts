@@ -75,6 +75,7 @@ export interface JobCard {
   opening_type: "Issue" | "Receipt" | null;
   opening_amount: number | null;
   opening_note: string | null;
+  description: string | null;
   settlement: Settlement | null;
   created_at: string;
   settled_at: string | null;
@@ -153,6 +154,7 @@ export interface LedgerRow {
   fine: number | null;
   from_location: string | null;
   to_location: string | null;
+  user_id: string | null;
 }
 
 export interface DashboardSnapshot {

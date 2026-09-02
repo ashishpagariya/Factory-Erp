@@ -5,9 +5,8 @@ import { officeDispatch } from "@/lib/actions/office";
 import { Field, Button } from "@/components/ui/primitives";
 import { useToast } from "@/components/ToastProvider";
 import { useRouter } from "next/navigation";
-import { g } from "@/lib/format";
 
-export function OfficeDispatchForm({ officeStock }: { officeStock: Record<string, number> }) {
+export function OfficeDispatchForm() {
   const dispatchable = MATERIALS.filter((m) => OFFICE_DISPATCHABLE.includes(m.category));
   const [materialId, setMaterialId] = useState(dispatchable[0].id);
   const [weight, setWeight] = useState("");
@@ -17,7 +16,6 @@ export function OfficeDispatchForm({ officeStock }: { officeStock: Record<string
   const router = useRouter();
 
   const mat = MAT(materialId)!;
-  const avail = officeStock[materialId] ?? 0;
 
   async function submit() {
     setPending(true);
@@ -70,11 +68,8 @@ export function OfficeDispatchForm({ officeStock }: { officeStock: Record<string
           )}
         </div>
       </div>
-      <Field label="Office Stock Available">
-        <input value={g(avail)} disabled />
-      </Field>
       <Button variant="gold" className="w-full" disabled={pending} onClick={submit}>
-        {pending ? "Posting…" : "Create Dispatch → Transit"}
+        Create Dispatch → Transit
       </Button>
       <div className="text-[11px] text-text-faint mt-2">
         Bullion: purity entered, must stay &gt;99 up to 100. Semi-finished: purity auto-locked 91.7. Non-gold: purity not

@@ -6,6 +6,7 @@ import { canAccess } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag, Stat, Callout } from "@/components/ui/primitives";
 import { IssueForm, ReceiveForm } from "./Forms";
+import { DescriptionForm } from "./DescriptionForm";
 import { g, pct } from "@/lib/format";
 import type { Settlement } from "@/lib/types";
 
@@ -79,6 +80,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </Callout>
         </div>
       )}
+
+      <Card className="mb-4">
+        <CardTitle>Job Description</CardTitle>
+        <DescriptionForm jobId={job.id} initial={job.description} />
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
         <Card>
