@@ -495,3 +495,78 @@ async function FinishedTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
                 No tags yet.
               </td>
             </tr>
+          )}
+          {tags.map((t) => (
+            <tr key={t.tag_no}>
+              <td className="font-mono">{t.tag_no}</td>
+              <td>{t.job_id}</td>
+              <td className="num-cell">{t.pieces}</td>
+              <td className="num-cell">{g(t.gross)}</td>
+              <td className="num-cell">{g(t.net)}</td>
+              <td>
+                <Badge kind={t.dispatch_status === "Delivered" ? "accepted" : t.dispatch_status === "Transit" ? "pending" : "closed"}>
+                  {t.dispatch_status === "InFactory" ? "In Factory" : t.dispatch_status}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+async function StockTakeTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
+  const [{ data: balances }, { data: takes }] = await Promise.all([
+    supabase.from("balances").select("*").eq("location", "FactoryBin"),
+    supabase.from("stock_takes").select("*").order("created_at", { ascending: false }),
+  ]);
+  const factoryBin: Record<string, number> = {};
+  (balances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
+  const takesRows = (takes as StockTake[]) ?? [];
+
+  return (
+    <Card>
+      <CardTitle>Physical Stock Take</CardTitle>
+      <StockTakeForm materials={MATERIALS} factoryBin={factoryBin} />
+      <div className="text-[11px] text-text-faint mb-3">
+        Count does not directly overwrite stock. Variance requires a reason and Admin approval before any adjustment posts.
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Material</th>
+            <th className="text-right">System</th>
+            <th className="text-right">Physical</th>
+            <th className="text-right">Variance</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {takesRows.length === 0 && (
+            <tr>
+              <td colSpan={7} className="text-center text-text-faint italic py-6">
+                No stock takes recorded.
+              </td>
+            </tr>
+          )}
+          {takesRows.map((s) => (
+            <tr key={s.id}>
+              <td className="font-mono">{s.id}</td>
+              <td>{s.material_id}</td>
+              <td className="num-cell">{g(s.system_weight)}</td>
+              <td className="num-cell">{g(s.physical_weight)}</td>
+              <td className={`num-cell ${Math.abs(s.variance) < 0.0005 ? "text-green" : "text-amber"}`}>{g(s.variance)}</td>
+              <td>
+                <Badge kind={s.status === "Pending" ? "pending" : "accepted"}>{s.status}</Badge>
+              </td>
+              <td>{s.status === "Pending" && isAdmin && <ApproveStockTakeButton id={s.id} />}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
