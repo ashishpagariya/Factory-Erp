@@ -72,18 +72,17 @@ export function IssueForm({ jobId, factoryBin, disabled }: { jobId: string; fact
 
 export function ReceiveForm({
   jobId,
-  outstanding,
+  outstandingTotal,
   disabled,
 }: {
   jobId: string;
-  outstanding: Record<string, number>;
+  outstandingTotal: number;
   disabled: boolean;
 }) {
-  const outstandingIds = Object.keys(outstanding).filter((k) => outstanding[k] > 0.0005);
   const [pieces, setPieces] = useState("");
   const [gross, setGross] = useState("");
   const [net, setNet] = useState("");
-  const [retMat, setRetMat] = useState(outstandingIds[0] ?? "");
+  const [retMat, setRetMat] = useState(KARIGAR_ISSUABLE[0]);
   const [retWeight, setRetWeight] = useState("");
   const [stoneRet, setStoneRet] = useState("");
   const [pending, setPending] = useState(false);
@@ -145,20 +144,22 @@ export function ReceiveForm({
         Receive Dhodi
       </Button>
       <div className="h-px bg-border-soft my-3.5" />
-      <Field label="Material Return">
+      <Field label={`Material Return — outstanding across all materials: ${g(outstandingTotal)}`}>
         <div className="flex gap-2">
-          <select value={retMat} onChange={(e) => setRetMat(e.target.value)} disabled={disabled || outstandingIds.length === 0}>
-            {outstandingIds.length === 0 && <option>Nothing outstanding</option>}
-            {outstandingIds.map((id) => (
+          <select value={retMat} onChange={(e) => setRetMat(e.target.value)} disabled={disabled}>
+            {KARIGAR_ISSUABLE.map((id) => (
               <option key={id} value={id}>
-                {MAT(id)!.name} (outstanding {g(outstanding[id])})
+                {MAT(id)!.name}
               </option>
             ))}
           </select>
           <input type="number" step="0.001" value={retWeight} onChange={(e) => setRetWeight(e.target.value)} placeholder="Weight g" className="max-w-[120px]" disabled={disabled} />
         </div>
+        <div className="text-[11px] text-text-faint mt-1">
+          Doesn&apos;t need to be the same material that was issued — the karigar may return any mix.
+        </div>
       </Field>
-      <Button className="w-full" disabled={disabled || pending || outstandingIds.length === 0} onClick={matReturn}>
+      <Button className="w-full" disabled={disabled || pending || outstandingTotal <= 0.0005} onClick={matReturn}>
         Return Material
       </Button>
       <div className="h-px bg-border-soft my-3.5" />
