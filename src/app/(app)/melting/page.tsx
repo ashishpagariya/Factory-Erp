@@ -15,7 +15,7 @@ export default async function MeltingPage() {
   const bullionMats = MATERIALS.filter((m) => m.category === "Bullion");
   const [{ data: balances }, { data: melts }, ...purityResults] = await Promise.all([
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
-    supabase.from("melts").select("*").order("created_at", { ascending: false }).limit(8),
+    supabase.from("melts").select("*").order("created_at", { ascending: false }).limit(5),
     ...bullionMats.map((m) => supabase.rpc("fn_bin_avg_purity", { p_material_id: m.id })),
   ]);
 
@@ -42,7 +42,7 @@ export default async function MeltingPage() {
       </Card>
 
       <Card>
-        <CardTitle>Melt History</CardTitle>
+        <CardTitle>Melt History (last 5)</CardTitle>
         <div className="overflow-x-auto">
           <table>
             <thead>

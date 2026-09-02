@@ -16,7 +16,7 @@ export default async function DispatchPage() {
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.from("factory_dispatches").select("*").eq("status", "Pending").order("created_at"),
     supabase.from("factory_dispatches").select("*").eq("status", "Discrepancy").order("created_at"),
-    supabase.from("factory_dispatches").select("*").eq("status", "Accepted").order("accepted_at", { ascending: false }).limit(6),
+    supabase.from("factory_dispatches").select("*").eq("status", "Accepted").order("accepted_at", { ascending: false }).limit(5),
     supabase.from("factory_dispatch_items").select("*"),
   ]);
 
@@ -136,7 +136,7 @@ export default async function DispatchPage() {
       </Card>
 
       <Card>
-        <CardTitle>Recently Accepted at Office</CardTitle>
+        <CardTitle>Recently Accepted at Office (last 5)</CardTitle>
         <table>
           <thead>
             <tr>

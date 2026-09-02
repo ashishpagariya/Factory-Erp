@@ -15,7 +15,7 @@ export default async function FactoryInwardPage() {
   const [{ data: pending }, { data: discrepancy }, { data: accepted }] = await Promise.all([
     supabase.from("office_dispatches").select("*").eq("status", "Pending").order("created_at"),
     supabase.from("office_dispatches").select("*").eq("status", "Discrepancy").order("created_at"),
-    supabase.from("office_dispatches").select("*").eq("status", "Accepted").order("accepted_at", { ascending: false }).limit(6),
+    supabase.from("office_dispatches").select("*").eq("status", "Accepted").order("accepted_at", { ascending: false }).limit(5),
   ]);
 
   const canResolve = profile.role === "Owner / Admin" || profile.role === "Supervisor";
@@ -95,7 +95,7 @@ export default async function FactoryInwardPage() {
       </Card>
 
       <Card>
-        <CardTitle>Recently Accepted</CardTitle>
+        <CardTitle>Recently Accepted (last 5)</CardTitle>
         <table>
           <thead>
             <tr>

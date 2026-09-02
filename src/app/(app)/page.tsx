@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { canAccess } from "@/lib/constants";
 import { Stat, Card, CardTitle } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
+import type { Role } from "@/lib/types";
 
 const TILES = [
   { href: "/admin-dashboard", icon: "◆", title: "Admin Gold Dashboard", desc: "Total accountable gold, drill-down, reconciliation." },
@@ -20,10 +21,21 @@ const TILES = [
   { href: "/masters", icon: "⚙", title: "Masters", desc: "Karigar / material / users & roles." },
 ];
 
+// Which home-page stat tiles each role actually wants to see — deliberately
+// not derived purely from page access, since a role can have access to a
+// screen without wanting it surfaced as a home dashboard stat.
+const HOME_STATS: Record<Role, string[]> = {
+  "Owner / Admin": ["pendingIn", "discrepancies", "openJobs", "pendingOut"],
+  "Office Manager": ["pendingOut"],
+  "Factory Manager": ["openJobs"],
+  Supervisor: ["pendingIn", "discrepancies", "openJobs", "pendingOut"],
+  "Tagged Product Receiver": [],
+};
+
 export default async function HomePage() {
   const { profile } = await requireProfile();
   const supabase = await createClient();
-  const isOfficeManager = profile.role === "Office Manager";
+  const stats = HOME_STATS[profile.role] ?? [];
 
   const [{ count: pendingIn }, { count: discrepancies }, { count: openJobs }, { count: pendingOut }] = await Promise.all([
     supabase.from("office_dispatches").select("*", { count: "exact", head: true }).eq("status", "Pending"),
@@ -51,24 +63,26 @@ export default async function HomePage() {
       </p>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-6">
-        {!isOfficeManager && (
+        {stats.includes("pendingIn") && (
           <Link href="/office-flow">
             <Stat label="Office → Factory Pending" value={String(pendingIn ?? 0)} sub="Awaiting factory acceptance" />
           </Link>
         )}
-        {!isOfficeManager && (
+        {stats.includes("discrepancies") && (
           <Link href="/factory-inward">
             <Stat label="Discrepancies Open" value={String(discrepancies ?? 0)} tone={discrepancies ? "red" : "default"} sub="Sent ≠ Received" />
           </Link>
         )}
-        {!isOfficeManager && (
+        {stats.includes("openJobs") && (
           <Link href="/karigar-job">
             <Stat label="Open Job Cards" value={String(openJobs ?? 0)} sub="One per Karigar" />
           </Link>
         )}
-        <Link href="/dispatch">
-          <Stat label="Factory → Office Pending" value={String(pendingOut ?? 0)} sub="Awaiting office acceptance" />
-        </Link>
+        {stats.includes("pendingOut") && (
+          <Link href="/dispatch">
+            <Stat label="Factory → Office Pending" value={String(pendingOut ?? 0)} sub="Awaiting office acceptance" />
+          </Link>
+        )}
         {profile.role === "Owner / Admin" && (
           <Link href="/admin-dashboard">
             <Stat
