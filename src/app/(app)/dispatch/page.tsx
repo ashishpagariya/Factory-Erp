@@ -3,18 +3,19 @@ import { createClient } from "@/lib/supabase/server";
 import { canAccess, OFFICE_DISPATCHABLE, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag } from "@/components/ui/primitives";
-import { DispatchFinishedForm, DispatchMaterialForm, AcceptFDButton } from "./DispatchClient";
-import type { Tag as TagRow, FactoryDispatch } from "@/lib/types";
+import { DispatchFinishedForm, DispatchMaterialForm, AcceptRow, OfficeDiscrepancyRow, type PendingFD } from "./DispatchClient";
+import type { Tag as TagRow } from "@/lib/types";
 
 export default async function DispatchPage() {
   const { profile } = await requireProfile();
   if (!canAccess(profile.role, "/dispatch")) return <AccessDenied role={profile.role} />;
 
   const supabase = await createClient();
-  const [{ data: readyTags }, { data: factoryBalances }, { data: pendingFD }, { data: acceptedFD }, { data: fdItems }] = await Promise.all([
+  const [{ data: readyTags }, { data: factoryBalances }, { data: pendingFD }, { data: discrepancyFD }, { data: acceptedFD }, { data: fdItems }] = await Promise.all([
     supabase.from("tags").select("*").eq("dispatch_status", "InFactory").order("created_at", { ascending: false }),
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.from("factory_dispatches").select("*").eq("status", "Pending").order("created_at"),
+    supabase.from("factory_dispatches").select("*").eq("status", "Discrepancy").order("created_at"),
     supabase.from("factory_dispatches").select("*").eq("status", "Accepted").order("accepted_at", { ascending: false }).limit(6),
     supabase.from("factory_dispatch_items").select("*"),
   ]);
@@ -22,7 +23,8 @@ export default async function DispatchPage() {
   const factoryBin: Record<string, number> = {};
   (factoryBalances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
   const materialsForReturn = MATERIALS.filter((m) => OFFICE_DISPATCHABLE.includes(m.category));
-  type FDItem = { dispatch_id: string; tag_no: string | null; material_id: string | null; gross: number };
+
+  type FDItem = { dispatch_id: string; tag_no: string | null; material_id: string | null; gross: number; net: number | null };
   const itemsByDispatch = new Map<string, FDItem[]>();
   ((fdItems as FDItem[]) ?? []).forEach((it) => {
     const arr = itemsByDispatch.get(it.dispatch_id) ?? [];
@@ -30,11 +32,16 @@ export default async function DispatchPage() {
     itemsByDispatch.set(it.dispatch_id, arr);
   });
 
-  function describeItems(dispatchId: string) {
-    return (itemsByDispatch.get(dispatchId) ?? [])
-      .map((it) => (it.tag_no ? it.tag_no : `${it.material_id} ${it.gross} g`))
-      .join(", ");
+  function toPendingFD(d: { id: string; category: string }): PendingFD {
+    const items = itemsByDispatch.get(d.id) ?? [];
+    const grossTotal = items.reduce((s, it) => s + Number(it.gross), 0);
+    const hasNet = items.some((it) => it.net != null);
+    const netTotal = hasNet ? items.reduce((s, it) => s + Number(it.net ?? it.gross), 0) : null;
+    const desc = items.map((it) => (it.tag_no ? it.tag_no : `${it.material_id} ${it.gross} g`)).join(", ");
+    return { id: d.id, category: d.category, grossTotal, netTotal, items: desc };
   }
+
+  const canResolve = profile.role === "Owner / Admin";
 
   return (
     <div>
@@ -59,35 +66,73 @@ export default async function DispatchPage() {
 
       <Card className="mb-4">
         <CardTitle tag={<Tag kind="must">Must</Tag>}>Office Manager — Accept from Factory</CardTitle>
-        <table>
-          <thead>
-            <tr>
-              <th>Dispatch ID</th>
-              <th>Category</th>
-              <th>Items</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(pendingFD ?? []).length === 0 && (
+        <div className="overflow-x-auto">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={4} className="text-center text-text-faint italic py-6">
-                  Nothing pending office acceptance.
-                </td>
+                <th>Dispatch ID</th>
+                <th>Category</th>
+                <th>Items</th>
+                <th className="text-right">Gross</th>
+                <th className="text-right">Net</th>
+                <th>Received Weight</th>
+                <th></th>
               </tr>
-            )}
-            {(pendingFD as FactoryDispatch[] | null)?.map((d) => (
-              <tr key={d.id}>
-                <td className="font-mono">{d.id}</td>
-                <td>{d.category}</td>
-                <td className="text-[12px]">{describeItems(d.id)}</td>
-                <td>
-                  <AcceptFDButton id={d.id} />
-                </td>
+            </thead>
+            <tbody>
+              {(pendingFD ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center text-text-faint italic py-6">
+                    Nothing pending office acceptance.
+                  </td>
+                </tr>
+              )}
+              {(pendingFD ?? []).map((d) => (
+                <AcceptRow key={d.id} fd={toPendingFD(d)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="text-[11px] text-text-faint mt-2">
+          Leave received-weight empty to accept exactly as sent. A different value raises a discrepancy instead of a silent adjustment.
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <CardTitle tag={<Tag kind="control">Control</Tag>}>Discrepancy Records</CardTitle>
+        <div className="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Dispatch ID</th>
+                <th>Category</th>
+                <th className="text-right">Sent</th>
+                <th className="text-right">Received</th>
+                <th className="text-right">Diff</th>
+                <th>Reason</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(discrepancyFD ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center text-text-faint italic py-6">
+                    No open discrepancies.
+                  </td>
+                </tr>
+              )}
+              {(discrepancyFD ?? []).map((d) => (
+                <OfficeDiscrepancyRow
+                  key={d.id}
+                  fd={toPendingFD(d)}
+                  received={Number(d.received_gross ?? 0)}
+                  reason={d.discrepancy_reason ?? "—"}
+                  canResolve={canResolve}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       <Card>
@@ -108,13 +153,16 @@ export default async function DispatchPage() {
                 </td>
               </tr>
             )}
-            {(acceptedFD as FactoryDispatch[] | null)?.map((d) => (
-              <tr key={d.id}>
-                <td className="font-mono">{d.id}</td>
-                <td>{d.category}</td>
-                <td className="text-[12px]">{describeItems(d.id)}</td>
-              </tr>
-            ))}
+            {(acceptedFD ?? []).map((d) => {
+              const pfd = toPendingFD(d);
+              return (
+                <tr key={d.id}>
+                  <td className="font-mono">{d.id}</td>
+                  <td>{d.category}</td>
+                  <td className="text-[12px]">{pfd.items}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>

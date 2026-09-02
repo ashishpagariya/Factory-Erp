@@ -56,6 +56,39 @@ export async function officeAccept(dispatchId: string): Promise<ActionResult> {
   return { ok: true, message: `${dispatchId} accepted into Office Stock.` };
 }
 
+export async function officeAcceptWithDiscrepancy(
+  dispatchId: string,
+  receivedGross: number,
+  reason: string
+): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin", "Office Manager"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_office_accept_discrepancy", {
+    p_dispatch_id: dispatchId,
+    p_received_gross: receivedGross,
+    p_reason: reason,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/dispatch");
+  return { ok: true, message: `Discrepancy raised on ${dispatchId}.` };
+}
+
+export async function resolveOfficeDiscrepancy(dispatchId: string, acceptAsIs: boolean): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_resolve_office_discrepancy", {
+    p_dispatch_id: dispatchId,
+    p_accept_received_as_is: acceptAsIs,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/dispatch");
+  return { ok: true, message: `${dispatchId} resolved.` };
+}
+
 export async function postStockTake(materialId: string, physicalWeight: number): Promise<ActionResult<{ id: string }>> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, ["Owner / Admin", "Factory Manager", "Supervisor"]);

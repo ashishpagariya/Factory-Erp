@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
-import { factoryDispatchFinished, factoryDispatchMaterial, officeAccept } from "@/lib/actions/misc";
-import { Button, Field } from "@/components/ui/primitives";
+import { factoryDispatchFinished, factoryDispatchMaterial, officeAccept, officeAcceptWithDiscrepancy, resolveOfficeDiscrepancy } from "@/lib/actions/misc";
+import { Button, Field, Badge } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
 import type { Tag, Material } from "@/lib/types";
 
@@ -115,23 +115,97 @@ export function DispatchMaterialForm({ materials, factoryBin }: { materials: Mat
   );
 }
 
-export function AcceptFDButton({ id }: { id: string }) {
+export type PendingFD = { id: string; category: string; grossTotal: number; netTotal: number | null; items: string };
+
+export function AcceptRow({ fd }: { fd: PendingFD }) {
+  const [received, setReceived] = useState("");
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const router = useRouter();
+
   async function accept() {
     setPending(true);
     try {
-      const res = await officeAccept(id);
+      let res;
+      if (received === "") {
+        res = await officeAccept(fd.id);
+      } else {
+        const rv = parseFloat(received);
+        if (Math.abs(rv - fd.grossTotal) < 0.0005) {
+          res = await officeAccept(fd.id);
+        } else {
+          const reason = window.prompt("Received weight differs from what was dispatched. Reason for discrepancy:", "Scale variance") || "Not specified";
+          res = await officeAcceptWithDiscrepancy(fd.id, rv, reason);
+        }
+      }
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) router.refresh();
     } finally {
       setPending(false);
     }
   }
+
   return (
-    <Button size="sm" variant="gold" disabled={pending} onClick={accept}>
-      Accept
-    </Button>
+    <tr>
+      <td className="font-mono">{fd.id}</td>
+      <td>{fd.category}</td>
+      <td className="text-[12px]">{fd.items}</td>
+      <td className="num-cell">{g(fd.grossTotal)}</td>
+      <td className="num-cell">{fd.netTotal != null ? g(fd.netTotal) : "—"}</td>
+      <td>
+        <input
+          type="number"
+          step="0.001"
+          value={received}
+          onChange={(e) => setReceived(e.target.value)}
+          placeholder={String(fd.grossTotal)}
+          className="w-[120px]"
+        />
+      </td>
+      <td>
+        <Button size="sm" variant="gold" disabled={pending} onClick={accept}>
+          Accept
+        </Button>
+      </td>
+    </tr>
+  );
+}
+
+export function OfficeDiscrepancyRow({ fd, received, reason, canResolve }: { fd: PendingFD; received: number; reason: string; canResolve: boolean }) {
+  const [pending, setPending] = useState(false);
+  const toast = useToast();
+  const router = useRouter();
+
+  async function resolve() {
+    setPending(true);
+    try {
+      const res = await resolveOfficeDiscrepancy(fd.id, true);
+      toast(res.message, res.ok ? "ok" : "err");
+      if (res.ok) router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td className="font-mono">{fd.id}</td>
+      <td>{fd.category}</td>
+      <td className="num-cell">{g(fd.grossTotal)}</td>
+      <td className="num-cell">{g(received)}</td>
+      <td className="num-cell text-red">{g(received - fd.grossTotal)}</td>
+      <td>{reason}</td>
+      <td>
+        {canResolve ? (
+          <Button size="sm" disabled={pending} onClick={resolve}>
+            Accept as received
+          </Button>
+        ) : (
+          <span className="text-[11px] text-text-faint">
+            <Badge kind="pending">Awaiting Admin</Badge>
+          </span>
+        )}
+      </td>
+    </tr>
   );
 }
