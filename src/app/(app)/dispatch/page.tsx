@@ -3,22 +3,32 @@ import { createClient } from "@/lib/supabase/server";
 import { canAccess, OFFICE_DISPATCHABLE, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag } from "@/components/ui/primitives";
-import { DispatchFinishedForm, DispatchMaterialForm, AcceptRow, OfficeDiscrepancyRow, type PendingFD } from "./DispatchClient";
-import type { Tag as TagRow } from "@/lib/types";
+import { DispatchJobFinishedForm, DispatchMaterialForm, AcceptRow, OfficeDiscrepancyRow, type PendingFD, type JobWithWip } from "./DispatchClient";
 
 export default async function DispatchPage() {
   const { profile } = await requireProfile();
   if (!canAccess(profile.role, "/dispatch")) return <AccessDenied role={profile.role} />;
 
   const supabase = await createClient();
-  const [{ data: readyTags }, { data: factoryBalances }, { data: pendingFD }, { data: discrepancyFD }, { data: acceptedFD }, { data: fdItems }] = await Promise.all([
-    supabase.from("tags").select("*").eq("dispatch_status", "InFactory").order("created_at", { ascending: false }),
+  const [{ data: wipBalances }, { data: jobsRaw }, { data: factoryBalances }, { data: pendingFD }, { data: discrepancyFD }, { data: acceptedFD }, { data: fdItems }] = await Promise.all([
+    supabase.from("balances").select("*").eq("location", "DhodiWIP").gt("weight", 0.0005),
+    supabase.from("job_cards").select("id, karigars(name)"),
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.from("factory_dispatches").select("*").eq("status", "Pending").order("created_at"),
     supabase.from("factory_dispatches").select("*").eq("status", "Discrepancy").order("created_at"),
     supabase.from("factory_dispatches").select("*").eq("status", "Accepted").order("accepted_at", { ascending: false }).limit(5),
     supabase.from("factory_dispatch_items").select("*"),
   ]);
+
+  const jobsById = new Map((jobsRaw ?? []).map((j) => [j.id, j]));
+  const jobsWithWip: JobWithWip[] = (wipBalances ?? [])
+    .filter((b) => jobsById.has(b.ref_id))
+    .map((b) => {
+      const j = jobsById.get(b.ref_id) as { karigars?: { name: string } | { name: string }[] };
+      const k = j.karigars;
+      const karigarName = Array.isArray(k) ? k[0]?.name ?? "—" : k?.name ?? "—";
+      return { id: b.ref_id, karigarName, wip: Number(b.weight) };
+    });
 
   const factoryBin: Record<string, number> = {};
   (factoryBalances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
@@ -50,13 +60,13 @@ export default async function DispatchPage() {
         <Tag kind="must">Must</Tag>
       </div>
       <p className="text-text-dim text-[13px] mb-4 max-w-2xl leading-relaxed">
-        Factory dispatches finished goods, or returns bullion/semi-finished/non-gold material back to office.
+        Factory dispatches finished goods directly from a settled job, or returns bullion/semi-finished/non-gold material back to office.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
         <Card>
           <CardTitle>Dispatch Finished Goods</CardTitle>
-          <DispatchFinishedForm tags={(readyTags as TagRow[]) ?? []} />
+          <DispatchJobFinishedForm jobs={jobsWithWip} />
         </Card>
         <Card>
           <CardTitle>Return Bullion / Semi-Finished / Non-Gold</CardTitle>

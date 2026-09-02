@@ -6,7 +6,7 @@ import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag, Badge } from "@/components/ui/primitives";
 import { StockTakeForm, ApproveStockTakeButton } from "./ReportsClient";
 import { g, pct } from "@/lib/format";
-import type { LedgerRow, JobCard, Melt, PolishRecord, StockTake, Tag as TagRow, Settlement } from "@/lib/types";
+import type { LedgerRow, JobCard, Melt, PolishRecord, GeruRecord, StockTake, Tag as TagRow, Settlement } from "@/lib/types";
 
 const TABS: [string, string][] = [
   ["ledger", "Universal Ledger"],
@@ -15,6 +15,7 @@ const TABS: [string, string][] = [
   ["openjobs", "Open Job Report"],
   ["meltloss", "Melting Loss"],
   ["polishloss", "Polish Loss"],
+  ["geru", "Geru"],
   ["transit", "Transit Report"],
   ["finished", "Finished / Tagged"],
   ["stocktake", "Stock Take"],
@@ -56,6 +57,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       {tab === "openjobs" && <OpenJobsTab supabase={supabase} />}
       {tab === "meltloss" && <MeltLossTab supabase={supabase} />}
       {tab === "polishloss" && <PolishLossTab supabase={supabase} />}
+      {tab === "geru" && <GeruTab supabase={supabase} />}
       {tab === "transit" && <TransitTab supabase={supabase} />}
       {tab === "finished" && <FinishedTab supabase={supabase} />}
       {tab === "stocktake" && <StockTakeTab supabase={supabase} isAdmin={profile.role === "Owner / Admin"} />}
@@ -122,8 +124,7 @@ async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
   (factoryBalances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
   const transit: Record<string, number> = {};
   (transitBalances ?? []).forEach((b) => (transit[b.material_id] = Number(b.weight)));
-  const wip: Record<string, number> = {};
-  (wipBalances ?? []).forEach((b) => (wip[b.material_id] = (wip[b.material_id] ?? 0) + Number(b.weight)));
+  const wipTotal = (wipBalances ?? []).reduce((s, b) => s + Number(b.weight), 0);
 
   return (
     <Card>
@@ -135,7 +136,6 @@ async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
             <th>Category</th>
             <th className="text-right">Factory Bin</th>
             <th className="text-right">In Transit (O→F)</th>
-            <th className="text-right">With Karigars</th>
           </tr>
         </thead>
         <tbody>
@@ -145,11 +145,13 @@ async function MaterialTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
               <td>{m.category}</td>
               <td className="num-cell">{g(factoryBin[m.id] ?? 0)}</td>
               <td className="num-cell">{g(transit[m.id] ?? 0)}</td>
-              <td className="num-cell">{g(wip[m.id] ?? 0)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      <div className="text-[11px] text-text-faint mt-3">
+        Total gold currently with karigars (all materials combined): {g(wipTotal)}
+      </div>
     </Card>
   );
 }
@@ -354,6 +356,58 @@ async function PolishLossTab({ supabase }: { supabase: Awaited<ReturnType<typeof
   );
 }
 
+async function GeruTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
+  const { data } = await supabase.from("geru_records").select("*").eq("status", "Closed").order("closed_at", { ascending: false });
+  const records = (data as GeruRecord[]) ?? [];
+  const totalAdded = records.filter((r) => r.direction === "Added").reduce((s, r) => s + Math.abs(r.raw_variance ?? 0), 0);
+  const totalReduced = records.filter((r) => r.direction === "Reduced").reduce((s, r) => s + Math.abs(r.raw_variance ?? 0), 0);
+  return (
+    <Card>
+      <CardTitle>Geru</CardTitle>
+      <table>
+        <thead>
+          <tr>
+            <th>Geru ID</th>
+            <th>Job Card</th>
+            <th className="text-right">Issued</th>
+            <th className="text-right">Returned</th>
+            <th>Direction</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.length === 0 && (
+            <tr>
+              <td colSpan={5} className="text-center text-text-faint italic py-6">
+                No closed Geru records.
+              </td>
+            </tr>
+          )}
+          {records.map((r) => (
+            <tr key={r.id}>
+              <td className="font-mono">{r.id}</td>
+              <td>{r.job_id}</td>
+              <td className="num-cell">{g(r.issued_gross)}</td>
+              <td className="num-cell">{g(r.returned_gross)}</td>
+              <td>
+                {r.direction && (
+                  <span className={r.direction === "Added" ? "text-amber" : "text-text-dim"}>
+                    {r.direction} {g(Math.abs(r.raw_variance ?? 0))}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {records.length > 0 && (
+        <div className="text-[11px] text-text-faint mt-3">
+          Total Added: {g(totalAdded)} · Total Reduced: {g(totalReduced)}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 async function TransitTab({ supabase }: { supabase: Awaited<ReturnType<typeof createClient>> }) {
   const [{ data: o2f }, { data: f2o }] = await Promise.all([
     supabase.from("balances").select("*").eq("location", "Transit_O2F").gt("weight", 0.0005),
@@ -441,78 +495,3 @@ async function FinishedTab({ supabase }: { supabase: Awaited<ReturnType<typeof c
                 No tags yet.
               </td>
             </tr>
-          )}
-          {tags.map((t) => (
-            <tr key={t.tag_no}>
-              <td className="font-mono">{t.tag_no}</td>
-              <td>{t.job_id}</td>
-              <td className="num-cell">{t.pieces}</td>
-              <td className="num-cell">{g(t.gross)}</td>
-              <td className="num-cell">{g(t.net)}</td>
-              <td>
-                <Badge kind={t.dispatch_status === "Delivered" ? "accepted" : t.dispatch_status === "Transit" ? "pending" : "closed"}>
-                  {t.dispatch_status === "InFactory" ? "In Factory" : t.dispatch_status}
-                </Badge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
-  );
-}
-
-async function StockTakeTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
-  const [{ data: balances }, { data: takes }] = await Promise.all([
-    supabase.from("balances").select("*").eq("location", "FactoryBin"),
-    supabase.from("stock_takes").select("*").order("created_at", { ascending: false }),
-  ]);
-  const factoryBin: Record<string, number> = {};
-  (balances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
-  const takesRows = (takes as StockTake[]) ?? [];
-
-  return (
-    <Card>
-      <CardTitle>Physical Stock Take</CardTitle>
-      <StockTakeForm materials={MATERIALS} factoryBin={factoryBin} />
-      <div className="text-[11px] text-text-faint mb-3">
-        Count does not directly overwrite stock. Variance requires a reason and Admin approval before any adjustment posts.
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Material</th>
-            <th className="text-right">System</th>
-            <th className="text-right">Physical</th>
-            <th className="text-right">Variance</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {takesRows.length === 0 && (
-            <tr>
-              <td colSpan={7} className="text-center text-text-faint italic py-6">
-                No stock takes recorded.
-              </td>
-            </tr>
-          )}
-          {takesRows.map((s) => (
-            <tr key={s.id}>
-              <td className="font-mono">{s.id}</td>
-              <td>{s.material_id}</td>
-              <td className="num-cell">{g(s.system_weight)}</td>
-              <td className="num-cell">{g(s.physical_weight)}</td>
-              <td className={`num-cell ${Math.abs(s.variance) < 0.0005 ? "text-green" : "text-amber"}`}>{g(s.variance)}</td>
-              <td>
-                <Badge kind={s.status === "Pending" ? "pending" : "accepted"}>{s.status}</Badge>
-              </td>
-              <td>{s.status === "Pending" && isAdmin && <ApproveStockTakeButton id={s.id} />}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
-  );
-}

@@ -2,33 +2,36 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
-import { factoryDispatchFinished, factoryDispatchMaterial, officeAccept, officeAcceptWithDiscrepancy, resolveOfficeDiscrepancy } from "@/lib/actions/misc";
+import { dispatchJobFinishedDirect, factoryDispatchMaterial, officeAccept, officeAcceptWithDiscrepancy, resolveOfficeDiscrepancy } from "@/lib/actions/misc";
 import { Button, Field, Badge } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
-import type { Tag, Material } from "@/lib/types";
+import type { Material } from "@/lib/types";
 
-export function DispatchFinishedForm({ tags }: { tags: Tag[] }) {
-  const [checked, setChecked] = useState<Set<string>>(new Set());
+export type JobWithWip = { id: string; karigarName: string; wip: number };
+
+export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
+  const [jobId, setJobId] = useState(jobs[0]?.id ?? "");
+  const [pieces, setPieces] = useState("");
+  const [purity, setPurity] = useState("91.70");
+  const [gross, setGross] = useState("");
+  const [net, setNet] = useState("");
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
-  function toggle(tagNo: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(tagNo)) next.delete(tagNo);
-      else next.add(tagNo);
-      return next;
-    });
+  if (jobs.length === 0) {
+    return <p className="text-[12px] text-text-faint">No job currently has finished product ready to dispatch.</p>;
   }
 
   async function submit() {
     setPending(true);
     try {
-      const res = await factoryDispatchFinished(Array.from(checked));
+      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), parseFloat(gross), parseFloat(net), parseFloat(purity));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
-        setChecked(new Set());
+        setPieces("");
+        setGross("");
+        setNet("");
         router.refresh();
       }
     } finally {
@@ -36,37 +39,47 @@ export function DispatchFinishedForm({ tags }: { tags: Tag[] }) {
     }
   }
 
-  if (tags.length === 0) {
-    return <p className="text-[12px] text-text-faint">No tagged product is currently sitting in the factory ready for dispatch.</p>;
-  }
-
   return (
     <div>
-      <table>
-        <thead>
-          <tr>
-            <th></th>
-            <th>Tag No</th>
-            <th>Job</th>
-            <th className="text-right">Gross</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tags.map((t) => (
-            <tr key={t.tag_no}>
-              <td>
-                <input type="checkbox" checked={checked.has(t.tag_no)} onChange={() => toggle(t.tag_no)} />
-              </td>
-              <td className="font-mono">{t.tag_no}</td>
-              <td>{t.job_id}</td>
-              <td className="num-cell">{g(t.gross)}</td>
-            </tr>
+      <Field label="Job Card">
+        <select value={jobId} onChange={(e) => setJobId(e.target.value)}>
+          {jobs.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.id} — {j.karigarName} (WIP {g(j.wip)})
+            </option>
           ))}
-        </tbody>
-      </table>
-      <Button variant="gold" className="w-full mt-2.5" disabled={pending || checked.size === 0} onClick={submit}>
-        Dispatch Selected → Transit
+        </select>
+      </Field>
+      <div className="flex gap-2.5">
+        <div className="flex-1">
+          <Field label="Pieces">
+            <input type="number" value={pieces} onChange={(e) => setPieces(e.target.value)} placeholder="e.g. 12" />
+          </Field>
+        </div>
+        <div className="flex-1">
+          <Field label="Purity">
+            <input type="number" step="0.01" value={purity} onChange={(e) => setPurity(e.target.value)} />
+          </Field>
+        </div>
+      </div>
+      <div className="flex gap-2.5">
+        <div className="flex-1">
+          <Field label="Final Gross (g)">
+            <input type="number" step="0.001" value={gross} onChange={(e) => setGross(e.target.value)} />
+          </Field>
+        </div>
+        <div className="flex-1">
+          <Field label="Final Net (g)">
+            <input type="number" step="0.001" value={net} onChange={(e) => setNet(e.target.value)} />
+          </Field>
+        </div>
+      </div>
+      <Button variant="gold" className="w-full" disabled={pending} onClick={submit}>
+        Dispatch Finished Goods → Transit
       </Button>
+      <div className="text-[11px] text-text-faint mt-2">
+        Tagging &amp; Kramasya sync now happen automatically as part of this dispatch.
+      </div>
     </div>
   );
 }

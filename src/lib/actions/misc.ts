@@ -26,6 +26,29 @@ export async function tagProduct(
   return { ok: true, message: `${data} created and synced with Kramasya.`, data: { tagNo: data as string } };
 }
 
+export async function dispatchJobFinishedDirect(
+  jobId: string,
+  pieces: number,
+  gross: number,
+  net: number,
+  purity: number
+): Promise<ActionResult<{ id: string }>> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin", "Factory Manager", "Supervisor"]);
+  if (denied) return denied;
+  const { data, error } = await supabase.rpc("fn_dispatch_job_finished_direct", {
+    p_job_id: jobId,
+    p_pieces: pieces,
+    p_gross: gross,
+    p_net: net,
+    p_purity: purity,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/dispatch");
+  return { ok: true, message: `${data} dispatched to Office.`, data: { id: data as string } };
+}
+
 export async function factoryDispatchFinished(tagNos: string[]): Promise<ActionResult<{ id: string }>> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, ["Owner / Admin", "Factory Manager", "Supervisor"]);

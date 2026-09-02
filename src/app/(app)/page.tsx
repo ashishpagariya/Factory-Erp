@@ -15,15 +15,11 @@ const TILES = [
   { href: "/polish-geru", icon: "✦", title: "Polish & Geru", desc: "Process IDs, issue and return." },
   { href: "/beads-stones", icon: "◈", title: "Beads / Stones", desc: "Setting issue / return / zero-mismatch rule." },
   { href: "/settlement", icon: "⚖", title: "Settlement", desc: "Wastage, saving / loss, auto next Job." },
-  { href: "/tagging", icon: "⛓", title: "Tagging & QC", desc: "Kramasya sync / tagged receive." },
   { href: "/dispatch", icon: "↥", title: "Dispatch", desc: "Factory → Office transit / acceptance." },
   { href: "/reports", icon: "▤", title: "Reports", desc: "Balances, ledgers, loss, transit." },
   { href: "/masters", icon: "⚙", title: "Masters", desc: "Karigar / material / users & roles." },
 ];
 
-// Which home-page stat tiles each role actually wants to see — deliberately
-// not derived purely from page access, since a role can have access to a
-// screen without wanting it surfaced as a home dashboard stat.
 const HOME_STATS: Record<Role, string[]> = {
   "Owner / Admin": ["pendingIn", "discrepancies", "openJobs", "pendingOut"],
   "Office Manager": ["pendingOut"],

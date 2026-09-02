@@ -21,16 +21,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     { data: mixedWip },
     { data: factoryBalances },
     { data: stoneWip },
-    { data: stoneIssues },
-    { data: stoneReturns },
+    { data: stoneIssueRows },
+    { data: stoneReturnRows },
   ] = await Promise.all([
     supabase.from("job_cards").select("*, karigars(name)").eq("id", id).single(),
     supabase.rpc("fn_compute_settlement", { p_job_id: id }),
     supabase.from("balances").select("*").eq("location", "KarigarWIP").eq("ref_id", id).eq("material_id", "MIXED").maybeSingle(),
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.rpc("fn_bin_get", { p_location: "KarigarStoneWIP", p_material_id: "STONE", p_ref_id: id }),
-    supabase.from("job_stone_issues").select("weight").eq("job_id", id),
-    supabase.from("job_stone_returns").select("weight").eq("job_id", id),
+    supabase.from("job_stone_issues").select("*").eq("job_id", id).order("created_at"),
+    supabase.from("job_stone_returns").select("*").eq("job_id", id).order("created_at"),
   ]);
 
   if (!job) notFound();
@@ -40,8 +40,13 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const factoryBin: Record<string, number> = {};
   (factoryBalances ?? []).forEach((b) => (factoryBin[b.material_id] = Number(b.weight)));
   const stoneOutstanding = Number(stoneWip ?? 0);
-  const stoneIssuedTotal = (stoneIssues ?? []).reduce((sum, r) => sum + Number(r.weight), 0);
-  const stoneReturnedTotal = (stoneReturns ?? []).reduce((sum, r) => sum + Number(r.weight), 0);
+  const stoneIssuedTotal = (stoneIssueRows ?? []).reduce((sum, r) => sum + Number(r.weight), 0);
+  const stoneReturnedTotal = (stoneReturnRows ?? []).reduce((sum, r) => sum + Number(r.weight), 0);
+
+  const stoneLedger = [
+    ...(stoneIssueRows ?? []).map((r) => ({ kind: "Issued" as const, id: r.id, weight: Number(r.weight), ts: r.created_at })),
+    ...(stoneReturnRows ?? []).map((r) => ({ kind: "Returned" as const, id: r.id, weight: Number(r.weight), ts: r.created_at })),
+  ].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
 
   const isOpen = job.status === "Open";
   const jobKarigarName = (job as { karigars?: { name: string } }).karigars?.name ?? "—";
@@ -94,6 +99,41 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <ReceiveForm jobId={job.id} outstandingTotal={outstandingTotal} disabled={!isOpen} />
         </Card>
       </div>
+
+      <Card className="mb-4">
+        <CardTitle tag={<Tag kind="control">Control</Tag>}>Stone Ledger — this Job</CardTitle>
+        <div className="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Reference</th>
+                <th className="text-right">Weight</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stoneLedger.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center text-text-faint italic py-6">
+                    No stone transactions on this job yet.
+                  </td>
+                </tr>
+              )}
+              {stoneLedger.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <span className={row.kind === "Issued" ? "text-amber" : "text-green"}>{row.kind}</span>
+                  </td>
+                  <td className="font-mono">{row.id}</td>
+                  <td className="num-cell">{g(row.weight)}</td>
+                  <td className="text-[11px] text-text-faint">{new Date(row.ts).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       <Card>
         <CardTitle tag={<Tag kind="control">Control</Tag>}>Live Balance &amp; Reconciliation</CardTitle>
