@@ -14,7 +14,7 @@ export default async function OfficeFlowPage() {
 
   const supabase = await createClient();
   const [{ data: dispatches }, { data: balances }] = await Promise.all([
-    supabase.from("office_dispatches").select("*").order("created_at", { ascending: false }).limit(30),
+    supabase.from("office_dispatches").select("*").order("created_at", { ascending: false }).limit(5),
     supabase.from("balances").select("*").eq("location", "OfficeStock"),
   ]);
 
@@ -59,7 +59,7 @@ export default async function OfficeFlowPage() {
       </div>
 
       <Card>
-        <CardTitle>Office Dispatches</CardTitle>
+        <CardTitle>Office Dispatches (last 5)</CardTitle>
         <div className="overflow-x-auto">
           <table>
             <thead>

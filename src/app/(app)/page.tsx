@@ -23,6 +23,7 @@ const TILES = [
 export default async function HomePage() {
   const { profile } = await requireProfile();
   const supabase = await createClient();
+  const isOfficeManager = profile.role === "Office Manager";
 
   const [{ count: pendingIn }, { count: discrepancies }, { count: openJobs }, { count: pendingOut }] = await Promise.all([
     supabase.from("office_dispatches").select("*", { count: "exact", head: true }).eq("status", "Pending"),
@@ -50,15 +51,21 @@ export default async function HomePage() {
       </p>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-6">
-        <Link href="/office-flow">
-          <Stat label="Office → Factory Pending" value={String(pendingIn ?? 0)} sub="Awaiting factory acceptance" />
-        </Link>
-        <Link href="/factory-inward">
-          <Stat label="Discrepancies Open" value={String(discrepancies ?? 0)} tone={discrepancies ? "red" : "default"} sub="Sent ≠ Received" />
-        </Link>
-        <Link href="/karigar-job">
-          <Stat label="Open Job Cards" value={String(openJobs ?? 0)} sub="One per Karigar" />
-        </Link>
+        {!isOfficeManager && (
+          <Link href="/office-flow">
+            <Stat label="Office → Factory Pending" value={String(pendingIn ?? 0)} sub="Awaiting factory acceptance" />
+          </Link>
+        )}
+        {!isOfficeManager && (
+          <Link href="/factory-inward">
+            <Stat label="Discrepancies Open" value={String(discrepancies ?? 0)} tone={discrepancies ? "red" : "default"} sub="Sent ≠ Received" />
+          </Link>
+        )}
+        {!isOfficeManager && (
+          <Link href="/karigar-job">
+            <Stat label="Open Job Cards" value={String(openJobs ?? 0)} sub="One per Karigar" />
+          </Link>
+        )}
         <Link href="/dispatch">
           <Stat label="Factory → Office Pending" value={String(pendingOut ?? 0)} sub="Awaiting office acceptance" />
         </Link>
