@@ -33,7 +33,7 @@ export const KARIGAR_ISSUABLE = ["MELTBAR", "DYE", "KDM", "BALLS", "CHAIN", "EF"
 // What each role can open — same model as the prototype's ROLE_ACCESS map.
 export const ROLE_ACCESS: Record<Role, "ALL" | string[]> = {
   "Owner / Admin": "ALL",
-  "Office Manager": ["/", "/office-flow"],
+  "Office Manager": ["/", "/office-flow", "/dispatch"],
   "Factory Manager": [
     "/",
     "/factory-inward",
