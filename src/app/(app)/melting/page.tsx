@@ -4,7 +4,7 @@ import { canAccess, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag } from "@/components/ui/primitives";
 import { MeltingForms } from "./MeltingForms";
-import { g } from "@/lib/format";
+import { MeltHistoryTable } from "./MeltHistoryTable";
 import type { Melt } from "@/lib/types";
 
 export default async function MeltingPage() {
@@ -27,6 +27,20 @@ export default async function MeltingPage() {
     avgPurity[m.id] = purityResults[i]?.data ?? null;
   });
 
+  const meltRows = (melts as Melt[]) ?? [];
+  const meltIds = meltRows.map((m) => m.id);
+  const { data: meltInputs } =
+    meltIds.length > 0 ? await supabase.from("melt_inputs").select("*").in("melt_id", meltIds) : { data: [] };
+
+  const inputsByMeltId: Record<string, { material_id: string; weight: number }[]> = {};
+  (meltInputs ?? []).forEach((row) => {
+    const arr = inputsByMeltId[row.melt_id] ?? [];
+    arr.push({ material_id: row.material_id, weight: Number(row.weight) });
+    inputsByMeltId[row.melt_id] = arr;
+  });
+
+  const canEdit = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
+
   return (
     <div>
       <div className="flex items-baseline gap-3 flex-wrap mb-1">
@@ -44,42 +58,14 @@ export default async function MeltingPage() {
       <Card>
         <CardTitle>Melt History (last 5)</CardTitle>
         <div className="overflow-x-auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Melt ID</th>
-                <th>Type</th>
-                <th>Input</th>
-                <th className="text-right">Input Wt</th>
-                <th className="text-right">Alloy</th>
-                <th className="text-right">Expected</th>
-                <th className="text-right">Actual</th>
-                <th className="text-right">Loss</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(melts ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center text-text-faint italic py-6">
-                    No melts posted yet.
-                  </td>
-                </tr>
-              )}
-              {(melts as Melt[] | null)?.map((m) => (
-                <tr key={m.id}>
-                  <td className="font-mono">{m.id}</td>
-                  <td>{m.melt_type}</td>
-                  <td>{m.input_material}</td>
-                  <td className="num-cell">{g(m.input_weight)}</td>
-                  <td className="num-cell">{g(m.auto_alloy)}</td>
-                  <td className="num-cell">{g(m.expected_output)}</td>
-                  <td className="num-cell">{g(m.actual_output)}</td>
-                  <td className="num-cell text-amber">{g(m.melt_loss)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <MeltHistoryTable melts={meltRows} inputsByMeltId={inputsByMeltId} canEdit={canEdit} />
         </div>
+        {canEdit && (
+          <div className="text-[11px] text-text-faint mt-2">
+            Editing reverses the melt&apos;s original effect on Factory Bin / Alloy / Melt Bar exactly, then reapplies
+            with the corrected numbers.
+          </div>
+        )}
       </Card>
     </div>
   );

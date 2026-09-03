@@ -5,6 +5,7 @@ import { actionContext, requireRole, pgErrorMessage } from "./context";
 import type { ActionResult } from "@/lib/types";
 
 const CAN_WORK_JOB = ["Owner / Admin", "Factory Manager", "Supervisor"] as const;
+const CAN_CORRECT = ["Owner / Admin", "Factory Manager"] as const;
 
 export async function createJobCard(karigarId: string): Promise<ActionResult<{ id: string }>> {
   const { supabase, userId, role } = await actionContext();
@@ -99,4 +100,46 @@ export async function updateJobDescription(jobId: string, description: string): 
   revalidatePath(`/karigar-job/${jobId}`);
   revalidatePath("/karigar-job");
   return { ok: true, message: "Description saved." };
+}
+
+export async function correctJobIssue(issueId: string, jobId: string, newWeight: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_job_issue", { p_issue_id: issueId, p_new_weight: newWeight, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath(`/karigar-job/${jobId}`);
+  return { ok: true, message: `Issue ${issueId} corrected.` };
+}
+
+export async function correctMaterialReturn(returnId: string, jobId: string, newWeight: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_material_return", { p_return_id: returnId, p_new_weight: newWeight, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath(`/karigar-job/${jobId}`);
+  return { ok: true, message: `Return ${returnId} corrected.` };
+}
+
+export async function correctDhodiReceipt(
+  returnId: string,
+  jobId: string,
+  pieces: number,
+  gross: number,
+  net: number
+): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_dhodi_receipt", {
+    p_return_id: returnId,
+    p_new_pieces: pieces,
+    p_new_gross: gross,
+    p_new_net: net,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath(`/karigar-job/${jobId}`);
+  return { ok: true, message: `Dhodi receipt ${returnId} corrected.` };
 }

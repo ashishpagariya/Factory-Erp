@@ -2,9 +2,9 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { canAccess } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
-import { Card, CardTitle, Tag, Badge } from "@/components/ui/primitives";
+import { Card, CardTitle, Tag } from "@/components/ui/primitives";
 import { OfficeDispatchForm } from "./OfficeDispatchForm";
-import { g, pct } from "@/lib/format";
+import { OfficeDispatchHistoryTable } from "./OfficeDispatchHistoryTable";
 import Link from "next/link";
 import type { OfficeDispatch } from "@/lib/types";
 
@@ -13,7 +13,10 @@ export default async function OfficeFlowPage() {
   if (!canAccess(profile.role, "/office-flow")) return <AccessDenied role={profile.role} />;
 
   const supabase = await createClient();
- const { data: dispatches } = await supabase.from("office_dispatches").select("*").order("created_at", { ascending: false }).limit(5);
+  const { data: dispatches } = await supabase.from("office_dispatches").select("*").order("created_at", { ascending: false }).limit(5);
+
+  const canEdit = profile.role === "Owner / Admin" || profile.role === "Office Manager";
+
   return (
     <div>
       <div className="flex items-baseline gap-3 flex-wrap mb-1">
@@ -30,7 +33,7 @@ export default async function OfficeFlowPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
         <Card>
           <CardTitle tag={<Tag kind="must">Must</Tag>}>Create Dispatch</CardTitle>
-         <OfficeDispatchForm />
+          <OfficeDispatchForm />
         </Card>
         <Card>
           <CardTitle tag={<Tag kind="control">Control</Tag>}>What Must Be Blocked</CardTitle>
@@ -38,8 +41,7 @@ export default async function OfficeFlowPage() {
             <li>Changing EF/Gejje/Screw/Repair purity from 91.7</li>
             <li>Choosing a gold bin for Stone / Alloy</li>
             <li>Posting zero or negative weight</li>
-            <li>Dispatching more than Office stock holds</li>
-            <li>Editing after factory accepts</li>
+            <li>Editing after factory accepts a discrepancy-resolved line</li>
           </ul>
           <div className="h-px bg-border-soft my-4" />
           <p className="text-[12px] text-text-dim mb-3">
@@ -54,42 +56,13 @@ export default async function OfficeFlowPage() {
       <Card>
         <CardTitle>Office Dispatches (last 5)</CardTitle>
         <div className="overflow-x-auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Dispatch ID</th>
-                <th>Material</th>
-                <th className="text-right">Gross</th>
-                <th className="text-right">Purity</th>
-                <th className="text-right">Fine</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(dispatches ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center text-text-faint italic py-6">
-                    No dispatches yet — create one above.
-                  </td>
-                </tr>
-              )}
-              {(dispatches as OfficeDispatch[] | null)?.map((d) => (
-                <tr key={d.id}>
-                  <td className="font-mono">{d.id}</td>
-                  <td>{d.material_id}</td>
-                  <td className="num-cell">{g(d.gross)}</td>
-                  <td className="num-cell">{d.purity != null ? pct(d.purity) : "—"}</td>
-                  <td className="num-cell">{d.fine != null ? g(d.fine) : "—"}</td>
-                  <td>
-                    <Badge kind={d.status === "Pending" ? "pending" : d.status === "Discrepancy" ? "discrepancy" : "accepted"}>
-                      {d.status}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <OfficeDispatchHistoryTable dispatches={(dispatches as OfficeDispatch[]) ?? []} canEdit={canEdit} />
         </div>
+        {canEdit && (
+          <div className="text-[11px] text-text-faint mt-2">
+            Editing adjusts Factory Bin or Transit correctly whether the dispatch is still Pending or already Accepted.
+          </div>
+        )}
       </Card>
     </div>
   );

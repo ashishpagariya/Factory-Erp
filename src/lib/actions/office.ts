@@ -70,3 +70,19 @@ export async function resolveDiscrepancy(dispatchId: string, acceptAsIs: boolean
   revalidatePath("/factory-inward");
   return { ok: true, message: `${dispatchId} resolved.` };
 }
+
+export async function correctOfficeDispatch(dispatchId: string, gross: number, purity: number | null): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin", "Office Manager"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_office_dispatch", {
+    p_dispatch_id: dispatchId,
+    p_new_gross: gross,
+    p_new_purity: purity,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/office-flow");
+  revalidatePath("/factory-inward");
+  return { ok: true, message: `${dispatchId} corrected.` };
+}

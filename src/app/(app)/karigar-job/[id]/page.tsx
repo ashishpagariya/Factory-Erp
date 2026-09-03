@@ -7,6 +7,7 @@ import { AccessDenied } from "@/components/AccessDenied";
 import { Card, CardTitle, Tag, Stat, Callout } from "@/components/ui/primitives";
 import { IssueForm, ReceiveForm } from "./Forms";
 import { DescriptionForm } from "./DescriptionForm";
+import { RecentTransactions } from "./RecentTransactions";
 import { g, pct } from "@/lib/format";
 import type { Settlement } from "@/lib/types";
 
@@ -24,6 +25,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     { data: stoneWip },
     { data: stoneIssueRows },
     { data: stoneReturnRows },
+    { data: issueRows },
+    { data: returnRows },
   ] = await Promise.all([
     supabase.from("job_cards").select("*, karigars(name)").eq("id", id).single(),
     supabase.rpc("fn_compute_settlement", { p_job_id: id }),
@@ -32,6 +35,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     supabase.rpc("fn_bin_get", { p_location: "KarigarStoneWIP", p_material_id: "STONE", p_ref_id: id }),
     supabase.from("job_stone_issues").select("*").eq("job_id", id).order("created_at"),
     supabase.from("job_stone_returns").select("*").eq("job_id", id).order("created_at"),
+    supabase.from("job_issues").select("*").eq("job_id", id).order("created_at", { ascending: false }),
+    supabase.from("job_returns").select("*").eq("job_id", id).order("created_at", { ascending: false }),
   ]);
 
   if (!job) notFound();
@@ -51,6 +56,10 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   const isOpen = job.status === "Open";
   const jobKarigarName = (job as { karigars?: { name: string } }).karigars?.name ?? "—";
+  const canEdit = isOpen && (profile.role === "Owner / Admin" || profile.role === "Factory Manager");
+
+  const materialReturns = (returnRows ?? []).filter((r) => r.return_type === "Material");
+  const dhodiReturns = (returnRows ?? []).filter((r) => r.return_type === "Dhodi");
 
   return (
     <div>
@@ -105,6 +114,18 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <ReceiveForm jobId={job.id} outstandingTotal={outstandingTotal} disabled={!isOpen} />
         </Card>
       </div>
+
+      <Card className="mb-4">
+        <CardTitle tag={<Tag kind="control">Control</Tag>}>Recent Transactions</CardTitle>
+        <RecentTransactions
+          jobId={job.id}
+          canEdit={canEdit}
+          issues={issueRows ?? []}
+          materialReturns={materialReturns}
+          dhodiReturns={dhodiReturns}
+        />
+        {!isOpen && <div className="text-[11px] text-text-faint mt-3">This job is Settled — its transaction history can no longer be corrected.</div>}
+      </Card>
 
       <Card className="mb-4">
         <CardTitle tag={<Tag kind="control">Control</Tag>}>Stone Ledger — this Job</CardTitle>
