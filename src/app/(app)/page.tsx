@@ -12,6 +12,7 @@ const TILES = [
   { href: "/factory-inward", icon: "↧", title: "Factory Inward", desc: "Pending dispatch acceptance & discrepancy." },
   { href: "/melting", icon: "◎", title: "Melting", desc: "Bullion → 91.7 and 91.7 remelt." },
   { href: "/karigar-job", icon: "⚒", title: "Karigar Job", desc: "Create / issue / return / live balance." },
+  { href: "/karigar-sales", icon: "₹", title: "Karigar Gold Sales", desc: "Karigar sells saved gold to the factory." },
   { href: "/polish-geru", icon: "✦", title: "Polish & Geru", desc: "Process IDs, issue and return." },
   { href: "/beads-stones", icon: "◈", title: "Beads / Stones", desc: "Setting issue / return / zero-mismatch rule." },
   { href: "/settlement", icon: "⚖", title: "Settlement", desc: "Wastage, saving / loss, auto next Job." },
