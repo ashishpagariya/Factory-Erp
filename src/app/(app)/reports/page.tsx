@@ -5,9 +5,10 @@ import { canAccess, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, Tag, Badge } from "@/components/ui/primitives";
 import { StockTakeForm, ApproveStockTakeButton } from "./ReportsClient";
+import { NiyadaSetOffForm } from "./NiyadaSetOffForm";
 import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { g, pct } from "@/lib/format";
-import type { LedgerRow, JobCard, Melt, PolishRecord, GeruRecord, StockTake, Tag as TagRow, Settlement } from "@/lib/types";
+import type { LedgerRow, JobCard, Melt, PolishRecord, GeruRecord, StockTake, Tag as TagRow, Settlement, NiyadaSettlement } from "@/lib/types";
 
 const TABS: [string, string][] = [
   ["ledger", "Universal Ledger"],
@@ -17,6 +18,7 @@ const TABS: [string, string][] = [
   ["meltloss", "Melting Loss"],
   ["polishloss", "Polish Loss"],
   ["geru", "Geru"],
+  ["niyada", "Niyada"],
   ["transit", "Transit Report"],
   ["finished", "Finished / Tagged"],
   ["stocktake", "Stock Take"],
@@ -69,6 +71,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       {tab === "meltloss" && <MeltLossTab supabase={supabase} isAdmin={isAdmin} />}
       {tab === "polishloss" && <PolishLossTab supabase={supabase} isAdmin={isAdmin} />}
       {tab === "geru" && <GeruTab supabase={supabase} isAdmin={isAdmin} />}
+      {tab === "niyada" && <NiyadaTab supabase={supabase} isAdmin={isAdmin} />}
       {tab === "transit" && <TransitTab supabase={supabase} isAdmin={isAdmin} />}
       {tab === "finished" && <FinishedTab supabase={supabase} isAdmin={isAdmin} />}
       {tab === "stocktake" && <StockTakeTab supabase={supabase} isAdmin={isAdmin} />}
@@ -548,6 +551,119 @@ async function GeruTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typ
         </div>
       )}
     </Card>
+  );
+}
+
+async function NiyadaTab({ supabase, isAdmin }: { supabase: Awaited<ReturnType<typeof createClient>>; isAdmin: boolean }) {
+  const [{ data: snapshot }, { data: history }] = await Promise.all([
+    supabase.rpc("fn_niyada_current_snapshot"),
+    supabase.from("niyada_settlements").select("*").order("created_at", { ascending: false }),
+  ]);
+
+  const snap = (snapshot as {
+    periodStart: string;
+    meltLossGrams: number;
+    polishLossGrams: number;
+    karigarLossGrams: number;
+    totalNiyadaGrams: number;
+  }) ?? { periodStart: "", meltLossGrams: 0, polishLossGrams: 0, karigarLossGrams: 0, totalNiyadaGrams: 0 };
+
+  const historyRows = (history as NiyadaSettlement[]) ?? [];
+  const exportData = historyRows.map((h) => ({
+    ID: h.id,
+    "Period Start": new Date(h.period_start).toLocaleString(),
+    "Period End": new Date(h.period_end).toLocaleString(),
+    "Total Niyada": h.total_niyada_grams,
+    Recovered: h.recovered_grams,
+    "Net Loss": h.net_loss_grams,
+    "Melt Loss": h.melt_loss_grams,
+    "Polish Loss": h.polish_loss_grams,
+    "Karigar Loss": h.karigar_loss_grams,
+  }));
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <h3 className="text-[12.5px] uppercase tracking-wide text-text-dim font-bold mb-1">
+          Current Period — Niyada (Partial Recoverable Loss)
+        </h3>
+        <p className="text-[11px] text-text-faint mb-3">
+          Since {snap.periodStart ? new Date(snap.periodStart).toLocaleDateString() : "the beginning"} — Melt Loss + Polish Loss + Karigar Loss (settled jobs: Total Issued − Total Received)
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <div>
+            <div className="text-[11px] text-text-dim uppercase tracking-wide mb-1.5">Melt Loss</div>
+            <div className="font-mono text-[18px] font-bold text-amber">{g(snap.meltLossGrams)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-text-dim uppercase tracking-wide mb-1.5">Polish Loss</div>
+            <div className="font-mono text-[18px] font-bold text-amber">{g(snap.polishLossGrams)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-text-dim uppercase tracking-wide mb-1.5">Karigar Loss</div>
+            <div className="font-mono text-[18px] font-bold text-amber">{g(snap.karigarLossGrams)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-text-dim uppercase tracking-wide mb-1.5">Total Niyada</div>
+            <div className="font-mono text-[20px] font-bold text-gold-bright">{g(snap.totalNiyadaGrams)}</div>
+          </div>
+        </div>
+      </Card>
+
+      {isAdmin ? (
+        <Card>
+          <h3 className="text-[12.5px] uppercase tracking-wide text-text-dim font-bold mb-3">Set Off This Period</h3>
+          <NiyadaSetOffForm totalNiyadaGrams={snap.totalNiyadaGrams} />
+        </Card>
+      ) : (
+        <Card>
+          <p className="text-[11px] text-text-faint">Only Owner/Admin can set off a Niyada period.</p>
+        </Card>
+      )}
+
+      <Card>
+        <TabHeader title="Set-Off History" isAdmin={isAdmin} exportData={exportData} filename="niyada_history.xlsx" />
+        <div className="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Period</th>
+                <th className="text-right">Total</th>
+                <th className="text-right">Recovered</th>
+                <th className="text-right">Net Loss</th>
+                <th className="text-right">Melt</th>
+                <th className="text-right">Polish</th>
+                <th className="text-right">Karigar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historyRows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center text-text-faint italic py-6">
+                    No set-offs recorded yet.
+                  </td>
+                </tr>
+              )}
+              {historyRows.map((h) => (
+                <tr key={h.id}>
+                  <td className="font-mono">{h.id}</td>
+                  <td className="text-[11px]">
+                    {new Date(h.period_start).toLocaleDateString()} – {new Date(h.period_end).toLocaleDateString()}
+                  </td>
+                  <td className="num-cell">{g(h.total_niyada_grams)}</td>
+                  <td className="num-cell text-green">{g(h.recovered_grams)}</td>
+                  <td className="num-cell text-red font-bold">{g(h.net_loss_grams)}</td>
+                  <td className="num-cell">{g(h.melt_loss_grams)}</td>
+                  <td className="num-cell">{g(h.polish_loss_grams)}</td>
+                  <td className="num-cell">{g(h.karigar_loss_grams)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
   );
 }
 

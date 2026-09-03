@@ -169,6 +169,19 @@ export interface KarigarGoldSale {
   karigars?: { name: string };
 }
 
+export interface NiyadaSettlement {
+  id: string;
+  period_start: string;
+  period_end: string;
+  total_niyada_grams: number;
+  recovered_grams: number;
+  net_loss_grams: number;
+  melt_loss_grams: number;
+  polish_loss_grams: number;
+  karigar_loss_grams: number;
+  created_at: string;
+}
+
 export interface DashboardSnapshot {
   bullionFine: number;
   semiFine: number;
