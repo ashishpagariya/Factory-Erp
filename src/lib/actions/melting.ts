@@ -56,3 +56,16 @@ export async function correctMeltBullionMulti(meltId: string, materialIds: strin
 
 export async function correctRemeltMulti(meltId: string, materialIds: string[], weights: number[], actualOutput: number): Promise<ActionResult> {
   const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_remelt_917_multi", {
+    p_melt_id: meltId,
+    p_new_material_ids: materialIds,
+    p_new_weights: weights,
+    p_new_actual_output: actualOutput,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/melting");
+  return { ok: true, message: `${meltId} corrected.` };
+}
