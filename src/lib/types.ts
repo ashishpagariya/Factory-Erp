@@ -157,6 +157,18 @@ export interface LedgerRow {
   user_id: string | null;
 }
 
+export interface KarigarGoldSale {
+  id: string;
+  karigar_id: string;
+  job_id: string | null;
+  grams: number;
+  rate_per_gram: number;
+  amount: number;
+  status: "Accumulated" | "GivenToOffice";
+  created_at: string;
+  karigars?: { name: string };
+}
+
 export interface DashboardSnapshot {
   bullionFine: number;
   semiFine: number;
@@ -166,6 +178,7 @@ export interface DashboardSnapshot {
   finishedTaggedFine: number;
   transitO2F: number;
   transitF2O: number;
+  karigarGoldPurchasesFine: number;
   currentAccountableFine: number;
   officeInvestmentFine: number;
   officeReceivedFine: number;

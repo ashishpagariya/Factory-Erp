@@ -8,9 +8,6 @@ export const ROLES: Role[] = [
   "Tagged Product Receiver",
 ];
 
-// Mirrors the `materials` table seed in 0001_init.sql — used for dropdowns
-// without an extra round trip where a static list is good enough. The
-// database remains the source of truth (all inserts/validation happen there).
 export const MATERIALS: Material[] = [
   { id: "BUL9990", name: "Bullion 99.90%", category: "Bullion", purity: 99.9, locked: false, wastage_applicable: false },
   { id: "BUL9950", name: "Bullion 99.50%", category: "Bullion", purity: 99.5, locked: false, wastage_applicable: false },
@@ -30,7 +27,6 @@ export const MAT = (id: string) => MATERIALS.find((m) => m.id === id);
 export const OFFICE_DISPATCHABLE: Material["category"][] = ["Bullion", "SemiFinished", "NonGold"];
 export const KARIGAR_ISSUABLE = ["MELTBAR", "DYE", "KDM", "BALLS", "CHAIN", "EF", "GEJJE", "SCREW", "REPAIR"];
 
-// What each role can open — same model as the prototype's ROLE_ACCESS map.
 export const ROLE_ACCESS: Record<Role, "ALL" | string[]> = {
   "Owner / Admin": "ALL",
   "Office Manager": ["/", "/office-flow", "/dispatch"],
@@ -39,10 +35,10 @@ export const ROLE_ACCESS: Record<Role, "ALL" | string[]> = {
     "/factory-inward",
     "/melting",
     "/karigar-job",
+    "/karigar-sales",
     "/polish-geru",
     "/beads-stones",
     "/settlement",
-    "/tagging",
     "/dispatch",
   ],
   Supervisor: [
@@ -50,14 +46,14 @@ export const ROLE_ACCESS: Record<Role, "ALL" | string[]> = {
     "/factory-inward",
     "/melting",
     "/karigar-job",
+    "/karigar-sales",
     "/polish-geru",
     "/beads-stones",
     "/settlement",
-    "/tagging",
     "/dispatch",
     "/reports",
   ],
-  "Tagged Product Receiver": ["/", "/tagging", "/reports"],
+  "Tagged Product Receiver": ["/", "/reports"],
 };
 export function canAccess(role: Role, path: string) {
   const allowed = ROLE_ACCESS[role];
