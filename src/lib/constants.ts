@@ -9,8 +9,7 @@ export const ROLES: Role[] = [
 ];
 
 export const MATERIALS: Material[] = [
-  { id: "BUL9990", name: "Bullion 99.90%", category: "Bullion", purity: 99.9, locked: false, wastage_applicable: false },
-  { id: "BUL9950", name: "Bullion 99.50%", category: "Bullion", purity: 99.5, locked: false, wastage_applicable: false },
+  { id: "BUL9990", name: "Bullion", category: "Bullion", purity: 99.9, locked: false, wastage_applicable: false },
   { id: "EF", name: "EF", category: "SemiFinished", purity: 91.7, locked: true, wastage_applicable: false },
   { id: "GEJJE", name: "Gejje", category: "SemiFinished", purity: 91.7, locked: true, wastage_applicable: false },
   { id: "SCREW", name: "Screw", category: "SemiFinished", purity: 91.7, locked: true, wastage_applicable: false },
