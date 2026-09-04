@@ -120,4 +120,17 @@ export async function correctSetting(
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, [...CAN_CORRECT]);
   if (denied) return denied;
-  const {
+  const { error } = await supabase.rpc("fn_correct_setting", {
+    p_setting_id: settingId,
+    p_new_product_gross: productGross,
+    p_new_stones_issued: stonesIssued,
+    p_new_other_material_issued: otherMaterialIssued,
+    p_new_final_product_gross: finalProductGross,
+    p_new_unused_stones_returned: unusedStonesReturned,
+    p_new_unused_material_returned: unusedMaterialReturned,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/beads-stones");
+  return { ok: true, message: `${settingId} corrected — reconciled exactly to 0.000 g.` };
+}
