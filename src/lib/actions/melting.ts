@@ -1,116 +1,71 @@
-import { requireProfile } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
-import { canAccess } from "@/lib/constants";
-import { AccessDenied } from "@/components/AccessDenied";
-import { Card, CardTitle, Tag, Stat } from "@/components/ui/primitives";
-import { SellGoldForm, GiveToOfficeButton, SaleRow } from "./KarigarSalesClient";
-import { g } from "@/lib/format";
-import type { Karigar, KarigarGoldSale } from "@/lib/types";
+"use server";
+import { revalidatePath } from "next/cache";
+import { actionContext, requireRole, pgErrorMessage } from "./context";
+import type { ActionResult } from "@/lib/types";
 
-export default async function KarigarSalesPage() {
-  const { profile } = await requireProfile();
-  if (!canAccess(profile.role, "/karigar-sales")) return <AccessDenied role={profile.role} />;
+const CAN_MELT = ["Owner / Admin", "Factory Manager", "Supervisor"] as const;
+const CAN_CORRECT = ["Owner / Admin", "Factory Manager"] as const;
 
-  const supabase = await createClient();
-  const [{ data: karigars }, { data: openJobs }, { data: sales }, { data: accumulatedFine }] = await Promise.all([
-    supabase.from("karigars").select("*").eq("active", true).order("name"),
-    supabase.from("job_cards").select("karigar_id, opening_type, opening_amount").eq("status", "Open"),
-    supabase.from("karigar_gold_sales").select("*, karigars(name)").order("created_at", { ascending: false }).limit(50),
-    supabase.rpc("fn_karigar_gold_purchases_fine"),
-  ]);
+export async function meltBullionMulti(materialIds: string[], weights: number[], actualOutput: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_MELT]);
+  if (denied) return denied;
 
-  const availableBalances: Record<string, number> = {};
-  (openJobs ?? []).forEach((j) => {
-    if (j.opening_type === "Receipt" && j.opening_amount) availableBalances[j.karigar_id] = Number(j.opening_amount);
+  const { data, error } = await supabase.rpc("fn_melt_bullion_multi", {
+    p_material_ids: materialIds,
+    p_weights: weights,
+    p_actual_output: actualOutput,
+    p_user: userId,
   });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/melting");
+  return { ok: true, message: `${data} posted. Output ${actualOutput} g from ${materialIds.length} source(s).` };
+}
 
-  const salesRows = (sales as KarigarGoldSale[]) ?? [];
-  const totalGrams = salesRows.reduce((s, r) => s + Number(r.grams), 0);
-  const totalAmount = salesRows.reduce((s, r) => s + Number(r.amount), 0);
-  const accumulatedRows = salesRows.filter((r) => r.status === "Accumulated");
-  const accumulatedGrams = accumulatedRows.reduce((s, r) => s + Number(r.grams), 0);
-  const accumulatedAmount = accumulatedRows.reduce((s, r) => s + Number(r.amount), 0);
+export async function remelt917Multi(materialIds: string[], weights: number[], actualOutput: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_MELT]);
+  if (denied) return denied;
 
-  const canGiveToOffice = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
-  const canEdit = canGiveToOffice;
+  const { data, error } = await supabase.rpc("fn_remelt_917_multi", {
+    p_material_ids: materialIds,
+    p_weights: weights,
+    p_actual_output: actualOutput,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/melting");
+  return { ok: true, message: `${data} posted. Output ${actualOutput} g from ${materialIds.length} source(s).` };
+}
 
-  return (
-    <div>
-      <div className="flex items-baseline gap-3 flex-wrap mb-1">
-        <h1 className="text-[21px] font-bold tracking-tight">Karigar Gold Sales</h1>
-        <Tag kind="config">Config</Tag>
-      </div>
-      <p className="text-text-dim text-[13px] mb-5 max-w-2xl leading-relaxed">
-        A karigar can sell their saved gold credit to the factory at an agreed rate. The gold accumulates here until
-        it&apos;s periodically handed over to Office.
-      </p>
+export async function correctMeltBullionMulti(meltId: string, materialIds: string[], weights: number[], actualOutput: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_melt_bullion_multi", {
+    p_melt_id: meltId,
+    p_new_material_ids: materialIds,
+    p_new_weights: weights,
+    p_new_actual_output: actualOutput,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/melting");
+  return { ok: true, message: `${meltId} corrected.` };
+}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-4">
-        <Stat label="Total Sales (all time)" value={g(totalGrams)} sub={`₹${totalAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
-        <Stat
-          label="Accumulated (awaiting handover)"
-          value={g(accumulatedGrams)}
-          tone={accumulatedGrams > 0.0005 ? "gold" : "default"}
-          sub={`₹${accumulatedAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
-        />
-        <Stat label="Fine-Gold Equivalent Held" value={g(typeof accumulatedFine === "number" ? accumulatedFine : 0)} sub="91.7% basis" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
-        <Card>
-          <CardTitle tag={<Tag kind="must">Must</Tag>}>Record a Sale</CardTitle>
-          <SellGoldForm karigars={(karigars as Karigar[]) ?? []} availableBalances={availableBalances} />
-        </Card>
-        <Card>
-          <CardTitle>Monthly Handover</CardTitle>
-          <p className="text-[12.5px] text-text-dim mb-4">
-            Once accumulated gold has been physically handed to Office, mark it here — this is a single lump-sum action,
-            not itemized per sale.
-          </p>
-          {canGiveToOffice ? (
-            <GiveToOfficeButton accumulatedGrams={accumulatedGrams} />
-          ) : (
-            <p className="text-[11px] text-text-faint">Only Admin or Factory Manager can record a handover.</p>
-          )}
-        </Card>
-      </div>
-
-      <Card>
-        <CardTitle>Sales History</CardTitle>
-        <div className="overflow-x-auto">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Karigar</th>
-                <th className="text-right">Grams</th>
-                <th className="text-right">Rate</th>
-                <th className="text-right">Amount</th>
-                <th>Status</th>
-                <th>When</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {salesRows.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center text-text-faint italic py-6">
-                    No gold sales recorded yet.
-                  </td>
-                </tr>
-              )}
-              {salesRows.map((r) => (
-                <SaleRow key={r.id} sale={r} canEdit={canEdit} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {salesRows.length > 0 && (
-          <div className="text-[12px] text-text-dim mt-3 font-semibold">
-            Totals: {g(totalGrams)} · ₹{totalAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
+export async function correctRemeltMulti(meltId: string, materialIds: string[], weights: number[], actualOutput: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_remelt_917_multi", {
+    p_melt_id: meltId,
+    p_new_material_ids: materialIds,
+    p_new_weights: weights,
+    p_new_actual_output: actualOutput,
+    p_user: userId,
+  });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/melting");
+  return { ok: true, message: `${meltId} corrected.` };
 }
