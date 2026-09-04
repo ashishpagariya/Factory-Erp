@@ -1,19 +1,20 @@
 "use client";
 import { useMemo, useState } from "react";
 import { MATERIALS } from "@/lib/constants";
-import { meltBullionMulti, remelt917Multi } from "@/lib/actions/melting";
+import { meltBullionLots, remelt917Multi } from "@/lib/actions/melting";
 import { Field, Button, Formula } from "@/components/ui/primitives";
 import { useToast } from "@/components/ToastProvider";
 import { useRouter } from "next/navigation";
 import { g, pct } from "@/lib/format";
 
+export type BullionLot = { id: string; purity: number; remaining_weight: number };
+type LotRow = { lotId: string; weight: string };
 type SourceRow = { matId: string; weight: string };
 
-export function MeltingForms({ factoryBin, avgPurity }: { factoryBin: Record<string, number>; avgPurity: Record<string, number | null> }) {
-  const bullionMats = MATERIALS.filter((m) => m.category === "Bullion");
+export function MeltingForms({ factoryBin, lots }: { factoryBin: Record<string, number>; lots: BullionLot[] }) {
   const remeltMats = MATERIALS.filter((m) => ["DYE", "KDM", "BALLS", "CHAIN"].includes(m.id));
 
-  const [bRows, setBRows] = useState<SourceRow[]>([{ matId: bullionMats[0].id, weight: "" }]);
+  const [bRows, setBRows] = useState<LotRow[]>([{ lotId: lots[0]?.id ?? "", weight: "" }]);
   const [bActual, setBActual] = useState("");
   const [rRows, setRRows] = useState<SourceRow[]>([{ matId: remeltMats[0].id, weight: "" }]);
   const [rActual, setRActual] = useState("");
@@ -22,12 +23,12 @@ export function MeltingForms({ factoryBin, avgPurity }: { factoryBin: Record<str
   const router = useRouter();
 
   function addBRow() {
-    setBRows((r) => [...r, { matId: bullionMats[0].id, weight: "" }]);
+    setBRows((r) => [...r, { lotId: lots[0]?.id ?? "", weight: "" }]);
   }
   function removeBRow(idx: number) {
     setBRows((r) => r.filter((_, i) => i !== idx));
   }
-  function updateBRow(idx: number, field: "matId" | "weight", value: string) {
+  function updateBRow(idx: number, field: "lotId" | "weight", value: string) {
     setBRows((r) => r.map((row, i) => (i === idx ? { ...row, [field]: value } : row)));
   }
 
@@ -44,36 +45,36 @@ export function MeltingForms({ factoryBin, avgPurity }: { factoryBin: Record<str
   const bPreview = useMemo(() => {
     let fineIn = 0;
     let totalWeight = 0;
-    let allKnown = true;
+    let allValid = true;
     for (const row of bRows) {
       const w = parseFloat(row.weight);
-      const p = avgPurity[row.matId];
+      const lot = lots.find((l) => l.id === row.lotId);
       if (!w || w <= 0) continue;
-      if (p == null) {
-        allKnown = false;
+      if (!lot || w > lot.remaining_weight + 0.0005) {
+        allValid = false;
         continue;
       }
-      fineIn += w * p;
+      fineIn += w * lot.purity;
       totalWeight += w;
     }
     fineIn = Math.round(fineIn * 100) / 10000;
-    if (totalWeight <= 0 || !allKnown) return null;
+    if (totalWeight <= 0 || !allValid) return null;
     const expected = Math.round((fineIn / 0.917) * 10000) / 10000;
     const alloy = Math.round((expected - totalWeight) * 10000) / 10000;
     return { fineIn, expected, alloy, totalWeight };
-  }, [bRows, avgPurity]);
+  }, [bRows, lots]);
 
   const rTotalWeight = useMemo(() => rRows.reduce((s, row) => s + (parseFloat(row.weight) || 0), 0), [rRows]);
 
   async function submitMelt() {
     setPending(true);
     try {
-      const matIds = bRows.map((r) => r.matId);
+      const lotIds = bRows.map((r) => r.lotId);
       const weights = bRows.map((r) => parseFloat(r.weight));
-      const res = await meltBullionMulti(matIds, weights, parseFloat(bActual));
+      const res = await meltBullionLots(lotIds, weights, parseFloat(bActual));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
-        setBRows([{ matId: bullionMats[0].id, weight: "" }]);
+        setBRows([{ lotId: lots[0]?.id ?? "", weight: "" }]);
         setBActual("");
         router.refresh();
       }
@@ -101,15 +102,15 @@ export function MeltingForms({ factoryBin, avgPurity }: { factoryBin: Record<str
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
       <div>
-        <div className="text-[11.5px] text-text-dim mb-1.5 font-semibold">Bullion Sources (add as many as you&apos;re melting together)</div>
-        {bRows.map((row, idx) => {
-          const p = avgPurity[row.matId];
-          return (
+        <div className="text-[11.5px] text-text-dim mb-1.5 font-semibold">Bullion Lots (pick exactly which batches to melt)</div>
+        {lots.length === 0 && <div className="text-[12px] text-text-faint mb-3">No Bullion lots currently in stock.</div>}
+        {lots.length > 0 &&
+          bRows.map((row, idx) => (
             <div key={idx} className="flex gap-2 mb-2 items-start">
-              <select value={row.matId} onChange={(e) => updateBRow(idx, "matId", e.target.value)} className="flex-1">
-                {bullionMats.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} — bin {g(factoryBin[m.id] ?? 0)}
+              <select value={row.lotId} onChange={(e) => updateBRow(idx, "lotId", e.target.value)} className="flex-1">
+                {lots.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.id} — {pct(l.purity)} — {g(l.remaining_weight)} left
                   </option>
                 ))}
               </select>
@@ -126,13 +127,13 @@ export function MeltingForms({ factoryBin, avgPurity }: { factoryBin: Record<str
                   ✕
                 </button>
               )}
-              <div className="text-[10.5px] text-text-faint self-center min-w-[60px]">{p != null ? pct(p) : "no stock"}</div>
             </div>
-          );
-        })}
-        <button type="button" onClick={addBRow} className="text-[12px] text-gold underline mb-3">
-          + Add another source
-        </button>
+          ))}
+        {lots.length > 0 && (
+          <button type="button" onClick={addBRow} className="text-[12px] text-gold underline mb-3">
+            + Add another lot
+          </button>
+        )}
 
         <Formula>
           {bPreview
@@ -148,7 +149,8 @@ export function MeltingForms({ factoryBin, avgPurity }: { factoryBin: Record<str
           Post Melt
         </Button>
         <div className="text-[11px] text-text-faint mt-2">
-          Purity for each source is locked to what Office actually sent. Alloy Bin available: {g(factoryBin["ALLOY"] ?? 0)}.
+          Only the purity of the lot(s) you select is used — not a blended average of everything in stock. Alloy Bin
+          available: {g(factoryBin["ALLOY"] ?? 0)}.
         </div>
       </div>
 

@@ -2,11 +2,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
-import { correctMeltBullionMulti, correctRemeltMulti } from "@/lib/actions/melting";
-import { MATERIALS, MAT } from "@/lib/constants";
+import { correctMeltBullionLots, correctRemeltMulti } from "@/lib/actions/melting";
+import { MATERIALS } from "@/lib/constants";
 import { Button } from "@/components/ui/primitives";
-import { g } from "@/lib/format";
+import { g, pct } from "@/lib/format";
 import type { Melt } from "@/lib/types";
+import type { BullionLot } from "./MeltingForms";
 
 type InputRow = { material_id: string; weight: number };
 type MeltRow = Melt;
@@ -15,10 +16,12 @@ export function MeltHistoryTable({
   melts,
   inputsByMeltId,
   canEdit,
+  lots,
 }: {
   melts: MeltRow[];
   inputsByMeltId: Record<string, InputRow[]>;
   canEdit: boolean;
+  lots: BullionLot[];
 }) {
   return (
     <table>
@@ -44,20 +47,27 @@ export function MeltHistoryTable({
           </tr>
         )}
         {melts.map((m) => (
-          <MeltHistoryRow key={m.id} melt={m} inputs={inputsByMeltId[m.id] ?? []} canEdit={canEdit} />
+          <MeltHistoryRow key={m.id} melt={m} inputs={inputsByMeltId[m.id] ?? []} canEdit={canEdit} lots={lots} />
         ))}
       </tbody>
     </table>
   );
 }
 
-function MeltHistoryRow({ melt, inputs, canEdit }: { melt: MeltRow; inputs: InputRow[]; canEdit: boolean }) {
+function MeltHistoryRow({ melt, inputs, canEdit, lots }: { melt: MeltRow; inputs: InputRow[]; canEdit: boolean; lots: BullionLot[] }) {
   const [editing, setEditing] = useState(false);
   const isBullion = melt.melt_type.startsWith("Bullion");
-  const options = isBullion ? MATERIALS.filter((m) => m.category === "Bullion") : MATERIALS.filter((m) => ["DYE", "KDM", "BALLS", "CHAIN"].includes(m.id));
+  const remeltOptions = MATERIALS.filter((m) => ["DYE", "KDM", "BALLS", "CHAIN"].includes(m.id));
+
+  // For a Bullion melt, the row's original lot(s) must still exist as options — combine
+  // currently-available lots with any lot(s) this melt used (even if now fully consumed
+  // elsewhere), so the dropdown always shows the correct current selection.
+  const usedLotIds = new Set(inputs.map((i) => i.material_id));
+  const bullionOptions = [...lots, ...lots.filter((l) => usedLotIds.has(l.id)) ? [] : []];
+  const lotOptionsMap = new Map(lots.map((l) => [l.id, l]));
 
   const [rows, setRows] = useState<{ matId: string; weight: string }[]>(
-    inputs.length > 0 ? inputs.map((i) => ({ matId: i.material_id, weight: String(i.weight) })) : [{ matId: options[0]?.id ?? "", weight: "" }]
+    inputs.length > 0 ? inputs.map((i) => ({ matId: i.material_id, weight: String(i.weight) })) : isBullion ? [{ matId: lots[0]?.id ?? "", weight: "" }] : [{ matId: remeltOptions[0]?.id ?? "", weight: "" }]
   );
   const [actual, setActual] = useState(String(melt.actual_output));
   const [pending, setPending] = useState(false);
@@ -65,7 +75,7 @@ function MeltHistoryRow({ melt, inputs, canEdit }: { melt: MeltRow; inputs: Inpu
   const router = useRouter();
 
   function addRow() {
-    setRows((r) => [...r, { matId: options[0]?.id ?? "", weight: "" }]);
+    setRows((r) => [...r, { matId: isBullion ? lots[0]?.id ?? "" : remeltOptions[0]?.id ?? "", weight: "" }]);
   }
   function removeRow(idx: number) {
     setRows((r) => r.filter((_, i) => i !== idx));
@@ -81,7 +91,7 @@ function MeltHistoryRow({ melt, inputs, canEdit }: { melt: MeltRow; inputs: Inpu
       const matIds = rows.map((r) => r.matId);
       const weights = rows.map((r) => parseFloat(r.weight));
       const res = isBullion
-        ? await correctMeltBullionMulti(melt.id, matIds, weights, parseFloat(actual))
+        ? await correctMeltBullionLots(melt.id, matIds, weights, parseFloat(actual))
         : await correctRemeltMulti(melt.id, matIds, weights, parseFloat(actual));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
@@ -94,7 +104,6 @@ function MeltHistoryRow({ melt, inputs, canEdit }: { melt: MeltRow; inputs: Inpu
   }
 
   if (!inputs.length) {
-    // Melt predates the correction feature — no stored input breakdown to edit safely.
     return (
       <tr>
         <td className="font-mono">{melt.id}</td>
@@ -135,13 +144,26 @@ function MeltHistoryRow({ melt, inputs, canEdit }: { melt: MeltRow; inputs: Inpu
             <div className="p-3">
               {rows.map((row, idx) => (
                 <div key={idx} className="flex gap-2 mb-2 items-start">
-                  <select value={row.matId} onChange={(e) => updateRow(idx, "matId", e.target.value)} className="flex-1">
-                    {options.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
+                  {isBullion ? (
+                    <select value={row.matId} onChange={(e) => updateRow(idx, "matId", e.target.value)} className="flex-1">
+                      {row.matId && !lotOptionsMap.has(row.matId) && (
+                        <option value={row.matId}>{row.matId} (original — not currently in stock list)</option>
+                      )}
+                      {lots.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.id} — {pct(l.purity)} — {g(l.remaining_weight)} left
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select value={row.matId} onChange={(e) => updateRow(idx, "matId", e.target.value)} className="flex-1">
+                      {remeltOptions.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <input
                     type="number"
                     step="0.001"
@@ -158,7 +180,7 @@ function MeltHistoryRow({ melt, inputs, canEdit }: { melt: MeltRow; inputs: Inpu
                 </div>
               ))}
               <button type="button" onClick={addRow} className="text-[12px] text-gold underline mb-3 block">
-                + Add another source
+                + Add another {isBullion ? "lot" : "source"}
               </button>
               <div className="flex gap-2.5 items-end">
                 <div className="flex-1 max-w-[200px]">
