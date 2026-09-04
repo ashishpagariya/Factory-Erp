@@ -3,34 +3,11 @@ import { revalidatePath } from "next/cache";
 import { actionContext, requireRole, pgErrorMessage } from "./context";
 import type { ActionResult } from "@/lib/types";
 
-export async function tagProduct(
-  jobId: string,
-  pieces: number,
-  gross: number,
-  net: number,
-  purity: number
-): Promise<ActionResult<{ tagNo: string }>> {
-  const { supabase, userId, role } = await actionContext();
-  const denied = requireRole(role, ["Owner / Admin", "Factory Manager", "Supervisor", "Tagged Product Receiver"]);
-  if (denied) return denied;
-  const { data, error } = await supabase.rpc("fn_tag_product", {
-    p_job_id: jobId,
-    p_pieces: pieces,
-    p_gross: gross,
-    p_net: net,
-    p_purity: purity,
-    p_user: userId,
-  });
-  if (error) return { ok: false, message: pgErrorMessage(error) };
-  revalidatePath("/tagging");
-  return { ok: true, message: `${data} created and synced with Kramasya.`, data: { tagNo: data as string } };
-}
-
 export async function dispatchJobFinishedDirect(
   jobId: string,
   pieces: number,
   gross: number,
-  net: number,
+  stoneWeight: number,
   purity: number
 ): Promise<ActionResult<{ id: string }>> {
   const { supabase, userId, role } = await actionContext();
@@ -40,7 +17,7 @@ export async function dispatchJobFinishedDirect(
     p_job_id: jobId,
     p_pieces: pieces,
     p_gross: gross,
-    p_net: net,
+    p_stone_weight: stoneWeight,
     p_purity: purity,
     p_user: userId,
   });
@@ -152,11 +129,17 @@ export async function correctFactoryDispatchMaterial(dispatchId: string, newWeig
   return { ok: true, message: `${dispatchId} corrected.` };
 }
 
-export async function correctFinishedDispatch(dispatchId: string, pieces: number, gross: number, net: number): Promise<ActionResult> {
+export async function correctFinishedDispatch(dispatchId: string, pieces: number, gross: number, stoneWeight: number): Promise<ActionResult> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, ["Owner / Admin", "Factory Manager"]);
   if (denied) return denied;
-  const { error } = await supabase.rpc("fn_correct_finished_dispatch", { p_dispatch_id: dispatchId, p_new_pieces: pieces, p_new_gross: gross, p_new_net: net, p_user: userId });
+  const { error } = await supabase.rpc("fn_correct_finished_dispatch", {
+    p_dispatch_id: dispatchId,
+    p_new_pieces: pieces,
+    p_new_gross: gross,
+    p_new_stone_weight: stoneWeight,
+    p_user: userId,
+  });
   if (error) return { ok: false, message: pgErrorMessage(error) };
   revalidatePath("/dispatch");
   return { ok: true, message: `${dispatchId} corrected.` };

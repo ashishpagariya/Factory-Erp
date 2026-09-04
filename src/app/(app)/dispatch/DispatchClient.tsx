@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
 import {
@@ -15,17 +15,28 @@ import { Button, Field, Badge } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
 import type { Material } from "@/lib/types";
 
-export type JobWithWip = { id: string; karigarName: string; wip: number };
+export type JobWithWip = { id: string; karigarName: string; wip: number; expectedStone: number; geruAdded: number };
 
 export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
   const [jobId, setJobId] = useState(jobs[0]?.id ?? "");
   const [pieces, setPieces] = useState("");
   const [purity, setPurity] = useState("91.70");
   const [gross, setGross] = useState("");
-  const [net, setNet] = useState("");
+  const [stoneWeight, setStoneWeight] = useState("");
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const router = useRouter();
+
+  const job = jobs.find((j) => j.id === jobId);
+
+  const preview = useMemo(() => {
+    const g0 = parseFloat(gross);
+    const s0 = parseFloat(stoneWeight);
+    if (!g0 || isNaN(s0) || !job) return null;
+    const net = g0 - s0 - job.geruAdded;
+    const stoneDiff = s0 - job.expectedStone;
+    return { net, stoneDiff };
+  }, [gross, stoneWeight, job]);
 
   if (jobs.length === 0) {
     return <p className="text-[12px] text-text-faint">No job currently has finished product ready to dispatch.</p>;
@@ -34,12 +45,12 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
   async function submit() {
     setPending(true);
     try {
-      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), parseFloat(gross), parseFloat(net), parseFloat(purity));
+      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), parseFloat(gross), parseFloat(stoneWeight), parseFloat(purity));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
         setPieces("");
         setGross("");
-        setNet("");
+        setStoneWeight("");
         router.refresh();
       }
     } finally {
@@ -58,6 +69,16 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
           ))}
         </select>
       </Field>
+      {job && (
+        <div className="text-[11px] text-text-faint mb-2.5 flex gap-4 flex-wrap">
+          <span>
+            Expected stone on this job: <b className="text-text font-mono">{g(job.expectedStone)}</b>
+          </span>
+          <span>
+            Geru added (auto): <b className="text-text font-mono">{g(job.geruAdded)}</b>
+          </span>
+        </div>
+      )}
       <div className="flex gap-2.5">
         <div className="flex-1">
           <Field label="Pieces">
@@ -72,21 +93,31 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
       </div>
       <div className="flex gap-2.5">
         <div className="flex-1">
-          <Field label="Final Gross (g)">
+          <Field label="Gross (with Geru, g)">
             <input type="number" step="0.001" value={gross} onChange={(e) => setGross(e.target.value)} />
           </Field>
         </div>
         <div className="flex-1">
-          <Field label="Final Net (g)">
-            <input type="number" step="0.001" value={net} onChange={(e) => setNet(e.target.value)} />
+          <Field label="Stone Weight — measured now (g)">
+            <input type="number" step="0.001" value={stoneWeight} onChange={(e) => setStoneWeight(e.target.value)} />
           </Field>
         </div>
       </div>
+      {preview && (
+        <div className="text-[13px] font-mono mb-3 space-y-1">
+          <div>
+            Net to Office = {gross} − {stoneWeight} − {job?.geruAdded} = <span className="text-gold-bright font-bold">{g(preview.net)}</span>
+          </div>
+          <div className={Math.abs(preview.stoneDiff) < 0.0005 ? "text-green" : "text-amber"}>
+            Stone difference vs expected: {g(preview.stoneDiff)}
+          </div>
+        </div>
+      )}
       <Button variant="gold" className="w-full" disabled={pending} onClick={submit}>
         Dispatch Finished Goods → Transit
       </Button>
       <div className="text-[11px] text-text-faint mt-2">
-        Tagging &amp; Kramasya sync now happen automatically as part of this dispatch.
+        Tagging &amp; Kramasya sync happen automatically. Net = Gross − Stone − Geru added.
       </div>
     </div>
   );
@@ -146,6 +177,8 @@ export type PendingFD = {
   materialId?: string;
   tagNo?: string;
   pieces?: number;
+  stoneWeight?: number;
+  geruAdded?: number;
 };
 
 export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) {
@@ -154,9 +187,12 @@ export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) 
   const [editing, setEditing] = useState(false);
   const [editWeight, setEditWeight] = useState(String(fd.grossTotal));
   const [editPieces, setEditPieces] = useState(String(fd.pieces ?? 0));
-  const [editNet, setEditNet] = useState(String(fd.netTotal ?? fd.grossTotal));
+  const [editStone, setEditStone] = useState(String(fd.stoneWeight ?? 0));
   const toast = useToast();
   const router = useRouter();
+
+  const editedNetPreview =
+    fd.itemType === "finished" ? parseFloat(editWeight || "0") - parseFloat(editStone || "0") - (fd.geruAdded ?? 0) : null;
 
   async function accept() {
     setPending(true);
@@ -187,7 +223,7 @@ export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) 
       const res =
         fd.itemType === "material"
           ? await correctFactoryDispatchMaterial(fd.id, parseFloat(editWeight))
-          : await correctFinishedDispatch(fd.id, parseInt(editPieces || "0"), parseFloat(editWeight), parseFloat(editNet));
+          : await correctFinishedDispatch(fd.id, parseInt(editPieces || "0"), parseFloat(editWeight), parseFloat(editStone));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
         setEditing(false);
@@ -245,9 +281,12 @@ export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) 
               </div>
               {fd.itemType === "finished" && (
                 <div>
-                  <label className="block text-[11px] text-text-dim mb-1">Net (g)</label>
-                  <input type="number" step="0.001" value={editNet} onChange={(e) => setEditNet(e.target.value)} className="max-w-[130px]" />
+                  <label className="block text-[11px] text-text-dim mb-1">Stone Weight (g)</label>
+                  <input type="number" step="0.001" value={editStone} onChange={(e) => setEditStone(e.target.value)} className="max-w-[130px]" />
                 </div>
+              )}
+              {fd.itemType === "finished" && editedNetPreview != null && (
+                <div className="text-[12px] font-mono text-gold-bright pb-2">Net → {g(editedNetPreview)}</div>
               )}
               <Button variant="gold" size="sm" disabled={pending} onClick={saveCorrection}>
                 Save
