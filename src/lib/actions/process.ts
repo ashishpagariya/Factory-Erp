@@ -4,6 +4,7 @@ import { actionContext, requireRole, pgErrorMessage } from "./context";
 import type { ActionResult } from "@/lib/types";
 
 const CAN_WORK = ["Owner / Admin", "Factory Manager", "Supervisor"] as const;
+const CAN_CORRECT = ["Owner / Admin", "Factory Manager"] as const;
 
 export async function polishIssue(jobId: string, gross: number): Promise<ActionResult<{ id: string }>> {
   const { supabase, userId, role } = await actionContext();
@@ -25,6 +26,16 @@ export async function polishReturn(polishId: string, returnedGross: number): Pro
   return { ok: true, message: `${polishId} closed.` };
 }
 
+export async function correctPolish(polishId: string, newIssued: number, newReturned: number | null): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_polish", { p_polish_id: polishId, p_new_issued: newIssued, p_new_returned: newReturned, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/polish-geru");
+  return { ok: true, message: `${polishId} corrected.` };
+}
+
 export async function geruIssue(jobId: string, gross: number): Promise<ActionResult<{ id: string }>> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, [...CAN_WORK]);
@@ -43,6 +54,16 @@ export async function geruReturn(geruId: string, returnedGross: number): Promise
   if (error) return { ok: false, message: pgErrorMessage(error) };
   revalidatePath("/polish-geru");
   return { ok: true, message: `${geruId} closed.` };
+}
+
+export async function correctGeru(geruId: string, newIssued: number, newReturned: number | null): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_geru", { p_geru_id: geruId, p_new_issued: newIssued, p_new_returned: newReturned, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/polish-geru");
+  return { ok: true, message: `${geruId} corrected.` };
 }
 
 export async function settingIssue(
@@ -86,3 +107,17 @@ export async function settingReturn(
   revalidatePath("/beads-stones");
   return { ok: true, message: `${settingId} closed. Reconciled exactly to 0.000 g.` };
 }
+
+export async function correctSetting(
+  settingId: string,
+  productGross: number,
+  stonesIssued: number,
+  otherMaterialIssued: number,
+  finalProductGross: number | null,
+  unusedStonesReturned: number | null,
+  unusedMaterialReturned: number | null
+): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const {

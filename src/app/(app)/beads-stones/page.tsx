@@ -26,6 +26,8 @@ export default async function BeadsStonesPage({ searchParams }: { searchParams: 
     ? await supabase.from("setting_records").select("*").eq("job_id", jobId).order("created_at", { ascending: false })
     : { data: [] };
 
+  const canEdit = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
+
   return (
     <div>
       <div className="flex items-baseline gap-3 flex-wrap mb-1">
@@ -37,7 +39,7 @@ export default async function BeadsStonesPage({ searchParams }: { searchParams: 
         receipt — NO stone/beads loss is accepted.
       </p>
       <div className="mb-4">
-        <JobPicker jobs={jobsWithWip as any} current={jobId} />
+        <JobPicker jobs={jobsWithWip} current={jobId} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">
         <Card>
@@ -49,8 +51,8 @@ export default async function BeadsStonesPage({ searchParams }: { searchParams: 
           <Formula>{`Difference = Total Out − Total Back/Used\nIf Difference = 0.000 g → OK\nIf Difference ≠ 0 → BLOCK CLOSURE`}</Formula>
           <div className="mt-2.5">
             <Callout kind="block">
-              No approval can convert a stone/beads mismatch into an accepted loss. The operator cannot hide a mismatch by
-              editing an earlier posted weight.
+              No approval can convert a stone/beads mismatch into an accepted loss — this rule still applies to corrections,
+              which must also reconcile to exactly zero.
             </Callout>
           </div>
         </Card>
@@ -61,7 +63,7 @@ export default async function BeadsStonesPage({ searchParams }: { searchParams: 
           <p className="text-[12px] text-text-faint">No setting records for this job yet.</p>
         )}
         {(settingRecords as SettingRecord[] | null)?.map((r) => (
-          <SettingRow key={r.id} r={r} />
+          <SettingRow key={r.id} r={r} canEdit={canEdit} />
         ))}
       </Card>
     </div>

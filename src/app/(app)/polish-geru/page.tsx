@@ -24,6 +24,8 @@ export default async function PolishGeruPage({ searchParams }: { searchParams: P
     jobId ? supabase.from("geru_records").select("*").eq("job_id", jobId).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
 
+  const canEdit = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
+
   return (
     <div>
       <div className="flex items-baseline gap-3 flex-wrap mb-1">
@@ -35,16 +37,16 @@ export default async function PolishGeruPage({ searchParams }: { searchParams: P
         original open ID.
       </p>
       <div className="mb-4">
-        <JobPicker jobs={jobsWithWip as any} current={jobId} />
+        <JobPicker jobs={jobsWithWip} current={jobId} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
         <Card>
           <CardTitle tag={<Tag kind="must">Must</Tag>}>Polish</CardTitle>
-          <PolishPanel jobId={jobId} records={(polishRecords as never[]) ?? []} wip={jobId ? wipByJob[jobId] ?? 0 : 0} />
+          <PolishPanel jobId={jobId} records={(polishRecords as never[]) ?? []} wip={jobId ? wipByJob[jobId] ?? 0 : 0} canEdit={canEdit} />
         </Card>
         <Card>
           <CardTitle tag={<Tag kind="must">Must</Tag>}>Geru</CardTitle>
-          <GeruPanel jobId={jobId} records={(geruRecords as never[]) ?? []} wip={jobId ? wipByJob[jobId] ?? 0 : 0} />
+          <GeruPanel jobId={jobId} records={(geruRecords as never[]) ?? []} wip={jobId ? wipByJob[jobId] ?? 0 : 0} canEdit={canEdit} />
           <div className="mt-2.5">
             <Callout kind="control">
               Raw source formula: Issue − Return. Because the sign can confuse operators, the UI labels it Added / Reduced.
