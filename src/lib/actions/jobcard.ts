@@ -143,3 +143,23 @@ export async function correctDhodiReceipt(
   revalidatePath(`/karigar-job/${jobId}`);
   return { ok: true, message: `Dhodi receipt ${returnId} corrected.` };
 }
+
+export async function correctStoneIssue(issueId: string, jobId: string, newWeight: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_stone_issue", { p_issue_id: issueId, p_new_weight: newWeight, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath(`/karigar-job/${jobId}`);
+  return { ok: true, message: `Stone issue ${issueId} corrected.` };
+}
+
+export async function correctStoneReturn(returnId: string, jobId: string, newWeight: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, [...CAN_CORRECT]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_stone_return", { p_return_id: returnId, p_new_weight: newWeight, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath(`/karigar-job/${jobId}`);
+  return { ok: true, message: `Stone return ${returnId} corrected.` };
+}

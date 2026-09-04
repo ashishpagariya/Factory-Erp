@@ -42,16 +42,34 @@ export default async function DispatchPage() {
     itemsByDispatch.set(it.dispatch_id, arr);
   });
 
+  const { data: tagsForPieces } = await supabase.from("tags").select("tag_no, pieces");
+  const piecesByTag = new Map((tagsForPieces ?? []).map((t) => [t.tag_no, t.pieces]));
+
   function toPendingFD(d: { id: string; category: string }): PendingFD {
     const items = itemsByDispatch.get(d.id) ?? [];
     const grossTotal = items.reduce((s, it) => s + Number(it.gross), 0);
     const hasNet = items.some((it) => it.net != null);
     const netTotal = hasNet ? items.reduce((s, it) => s + Number(it.net ?? it.gross), 0) : null;
     const desc = items.map((it) => (it.tag_no ? it.tag_no : `${it.material_id} ${it.gross} g`)).join(", ");
-    return { id: d.id, category: d.category, grossTotal, netTotal, items: desc };
+
+    let itemType: PendingFD["itemType"] = "other";
+    let materialId: string | undefined;
+    let tagNo: string | undefined;
+    let pieces: number | undefined;
+    if (items.length === 1 && items[0].material_id) {
+      itemType = "material";
+      materialId = items[0].material_id;
+    } else if (items.length === 1 && items[0].tag_no) {
+      itemType = "finished";
+      tagNo = items[0].tag_no;
+      pieces = piecesByTag.get(items[0].tag_no) ?? 0;
+    }
+
+    return { id: d.id, category: d.category, grossTotal, netTotal, items: desc, itemType, materialId, tagNo, pieces };
   }
 
   const canResolve = profile.role === "Owner / Admin";
+  const canEdit = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
 
   return (
     <div>
@@ -98,7 +116,7 @@ export default async function DispatchPage() {
                 </tr>
               )}
               {(pendingFD ?? []).map((d) => (
-                <AcceptRow key={d.id} fd={toPendingFD(d)} />
+                <AcceptRow key={d.id} fd={toPendingFD(d)} canEdit={canEdit} />
               ))}
             </tbody>
           </table>

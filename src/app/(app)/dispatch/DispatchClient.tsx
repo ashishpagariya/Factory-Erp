@@ -2,7 +2,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
-import { dispatchJobFinishedDirect, factoryDispatchMaterial, officeAccept, officeAcceptWithDiscrepancy, resolveOfficeDiscrepancy } from "@/lib/actions/misc";
+import {
+  dispatchJobFinishedDirect,
+  factoryDispatchMaterial,
+  officeAccept,
+  officeAcceptWithDiscrepancy,
+  resolveOfficeDiscrepancy,
+  correctFactoryDispatchMaterial,
+  correctFinishedDispatch,
+} from "@/lib/actions/misc";
 import { Button, Field, Badge } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
 import type { Material } from "@/lib/types";
@@ -128,11 +136,25 @@ export function DispatchMaterialForm({ materials, factoryBin }: { materials: Mat
   );
 }
 
-export type PendingFD = { id: string; category: string; grossTotal: number; netTotal: number | null; items: string };
+export type PendingFD = {
+  id: string;
+  category: string;
+  grossTotal: number;
+  netTotal: number | null;
+  items: string;
+  itemType: "material" | "finished" | "other";
+  materialId?: string;
+  tagNo?: string;
+  pieces?: number;
+};
 
-export function AcceptRow({ fd }: { fd: PendingFD }) {
+export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) {
   const [received, setReceived] = useState("");
   const [pending, setPending] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editWeight, setEditWeight] = useState(String(fd.grossTotal));
+  const [editPieces, setEditPieces] = useState(String(fd.pieces ?? 0));
+  const [editNet, setEditNet] = useState(String(fd.netTotal ?? fd.grossTotal));
   const toast = useToast();
   const router = useRouter();
 
@@ -158,29 +180,83 @@ export function AcceptRow({ fd }: { fd: PendingFD }) {
     }
   }
 
+  async function saveCorrection() {
+    if (!window.confirm(`Correct ${fd.id}?`)) return;
+    setPending(true);
+    try {
+      const res =
+        fd.itemType === "material"
+          ? await correctFactoryDispatchMaterial(fd.id, parseFloat(editWeight))
+          : await correctFinishedDispatch(fd.id, parseInt(editPieces || "0"), parseFloat(editWeight), parseFloat(editNet));
+      toast(res.message, res.ok ? "ok" : "err");
+      if (res.ok) {
+        setEditing(false);
+        router.refresh();
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const editable = canEdit && (fd.itemType === "material" || fd.itemType === "finished");
+
   return (
-    <tr>
-      <td className="font-mono">{fd.id}</td>
-      <td>{fd.category}</td>
-      <td className="text-[12px]">{fd.items}</td>
-      <td className="num-cell">{g(fd.grossTotal)}</td>
-      <td className="num-cell">{fd.netTotal != null ? g(fd.netTotal) : "—"}</td>
-      <td>
-        <input
-          type="number"
-          step="0.001"
-          value={received}
-          onChange={(e) => setReceived(e.target.value)}
-          placeholder={String(fd.grossTotal)}
-          className="w-[120px]"
-        />
-      </td>
-      <td>
-        <Button size="sm" variant="gold" disabled={pending} onClick={accept}>
-          Accept
-        </Button>
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td className="font-mono">{fd.id}</td>
+        <td>{fd.category}</td>
+        <td className="text-[12px]">{fd.items}</td>
+        <td className="num-cell">{g(fd.grossTotal)}</td>
+        <td className="num-cell">{fd.netTotal != null ? g(fd.netTotal) : "—"}</td>
+        <td>
+          <input
+            type="number"
+            step="0.001"
+            value={received}
+            onChange={(e) => setReceived(e.target.value)}
+            placeholder={String(fd.grossTotal)}
+            className="w-[120px]"
+          />
+        </td>
+        <td className="flex gap-1.5">
+          <Button size="sm" variant="gold" disabled={pending} onClick={accept}>
+            Accept
+          </Button>
+          {editable && (
+            <Button size="sm" onClick={() => setEditing((e) => !e)}>
+              {editing ? "Cancel" : "Edit"}
+            </Button>
+          )}
+        </td>
+      </tr>
+      {editing && (
+        <tr>
+          <td colSpan={7} className="bg-surface2">
+            <div className="p-2 flex gap-2 items-end flex-wrap">
+              {fd.itemType === "finished" && (
+                <div>
+                  <label className="block text-[11px] text-text-dim mb-1">Pieces</label>
+                  <input type="number" value={editPieces} onChange={(e) => setEditPieces(e.target.value)} className="max-w-[90px]" />
+                </div>
+              )}
+              <div>
+                <label className="block text-[11px] text-text-dim mb-1">{fd.itemType === "finished" ? "Gross" : "Weight"} (g)</label>
+                <input type="number" step="0.001" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="max-w-[130px]" />
+              </div>
+              {fd.itemType === "finished" && (
+                <div>
+                  <label className="block text-[11px] text-text-dim mb-1">Net (g)</label>
+                  <input type="number" step="0.001" value={editNet} onChange={(e) => setEditNet(e.target.value)} className="max-w-[130px]" />
+                </div>
+              )}
+              <Button variant="gold" size="sm" disabled={pending} onClick={saveCorrection}>
+                Save
+              </Button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

@@ -132,6 +132,36 @@ export async function approveStockTake(stockTakeId: string, reason: string): Pro
   return { ok: true, message: `${stockTakeId} approved.` };
 }
 
+export async function correctStockTake(stockTakeId: string, newPhysicalWeight: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_stock_take", { p_stock_take_id: stockTakeId, p_new_physical_weight: newPhysicalWeight, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/reports");
+  return { ok: true, message: `${stockTakeId} corrected.` };
+}
+
+export async function correctFactoryDispatchMaterial(dispatchId: string, newWeight: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin", "Factory Manager"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_factory_dispatch_material", { p_dispatch_id: dispatchId, p_new_weight: newWeight, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/dispatch");
+  return { ok: true, message: `${dispatchId} corrected.` };
+}
+
+export async function correctFinishedDispatch(dispatchId: string, pieces: number, gross: number, net: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin", "Factory Manager"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_finished_dispatch", { p_dispatch_id: dispatchId, p_new_pieces: pieces, p_new_gross: gross, p_new_net: net, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/dispatch");
+  return { ok: true, message: `${dispatchId} corrected.` };
+}
+
 export async function addKarigar(name: string, wastagePct: number): Promise<ActionResult> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, ["Owner / Admin"]);

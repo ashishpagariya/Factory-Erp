@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { canAccess, MATERIALS } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
 import { Card, Tag, Badge } from "@/components/ui/primitives";
-import { StockTakeForm, ApproveStockTakeButton } from "./ReportsClient";
+import { StockTakeForm, ApproveStockTakeButton, CorrectStockTakeButton } from "./ReportsClient";
 import { NiyadaSetOffForm } from "./NiyadaSetOffForm";
 import { ExportExcelButton } from "@/components/ExportExcelButton";
 import { g, pct } from "@/lib/format";
@@ -844,7 +844,10 @@ async function StockTakeTab({ supabase, isAdmin }: { supabase: Awaited<ReturnTyp
               <td>
                 <Badge kind={s.status === "Pending" ? "pending" : "accepted"}>{s.status}</Badge>
               </td>
-              <td>{s.status === "Pending" && isAdmin && <ApproveStockTakeButton id={s.id} />}</td>
+                            <td>
+                {s.status === "Pending" && isAdmin && <ApproveStockTakeButton id={s.id} />}
+                {s.status === "Approved" && isAdmin && <CorrectStockTakeButton id={s.id} currentPhysical={s.physical_weight} />}
+              </td>
             </tr>
           ))}
         </tbody>

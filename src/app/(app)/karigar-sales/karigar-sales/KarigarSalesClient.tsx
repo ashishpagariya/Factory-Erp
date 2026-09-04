@@ -2,10 +2,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
-import { sellKarigarGold, giveKarigarGoldToOffice } from "@/lib/actions/karigarSales";
-import { Button, Field } from "@/components/ui/primitives";
+import { sellKarigarGold, giveKarigarGoldToOffice, correctKarigarGoldSale } from "@/lib/actions/karigarSales";
+import { Button, Field, Badge } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
-import type { Karigar } from "@/lib/types";
+import type { Karigar, KarigarGoldSale } from "@/lib/types";
 
 export function SellGoldForm({ karigars, availableBalances }: { karigars: Karigar[]; availableBalances: Record<string, number> }) {
   const [karigarId, setKarigarId] = useState(karigars[0]?.id ?? "");
@@ -98,5 +98,73 @@ export function GiveToOfficeButton({ accumulatedGrams }: { accumulatedGrams: num
     <Button disabled={pending || accumulatedGrams <= 0.0005} onClick={submit}>
       Give Accumulated Gold to Office
     </Button>
+  );
+}
+
+export function SaleRow({ sale, canEdit }: { sale: KarigarGoldSale; canEdit: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [grams, setGrams] = useState(String(sale.grams));
+  const [rate, setRate] = useState(String(sale.rate_per_gram));
+  const [pending, setPending] = useState(false);
+  const toast = useToast();
+  const router = useRouter();
+  const blocked = sale.status === "GivenToOffice";
+
+  async function save() {
+    if (!window.confirm(`Correct ${sale.id}?`)) return;
+    setPending(true);
+    try {
+      const res = await correctKarigarGoldSale(sale.id, parseFloat(grams), parseFloat(rate));
+      toast(res.message, res.ok ? "ok" : "err");
+      if (res.ok) {
+        setEditing(false);
+        router.refresh();
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <tr>
+        <td className="font-mono">{sale.id}</td>
+        <td>{sale.karigars?.name}</td>
+        <td className="num-cell">{g(sale.grams)}</td>
+        <td className="num-cell">₹{Number(sale.rate_per_gram).toLocaleString("en-IN")}</td>
+        <td className="num-cell">₹{Number(sale.amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+        <td>
+          <Badge kind={sale.status === "Accumulated" ? "pending" : "accepted"}>{sale.status === "GivenToOffice" ? "Given to Office" : "Accumulated"}</Badge>
+        </td>
+        <td className="text-[11px] text-text-faint">{new Date(sale.created_at).toLocaleString()}</td>
+        <td>
+          {canEdit && !blocked && (
+            <Button size="sm" onClick={() => setEditing((e) => !e)}>
+              {editing ? "Cancel" : "Edit"}
+            </Button>
+          )}
+          {canEdit && blocked && <span className="text-[10.5px] text-text-faint">Not correctable</span>}
+        </td>
+      </tr>
+      {editing && (
+        <tr>
+          <td colSpan={8} className="bg-surface2">
+            <div className="p-2 flex gap-2 items-end flex-wrap">
+              <div>
+                <label className="block text-[11px] text-text-dim mb-1">Grams</label>
+                <input type="number" step="0.001" value={grams} onChange={(e) => setGrams(e.target.value)} className="max-w-[120px]" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-text-dim mb-1">Rate (₹/g)</label>
+                <input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} className="max-w-[120px]" />
+              </div>
+              <Button variant="gold" size="sm" disabled={pending} onClick={save}>
+                Save
+              </Button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

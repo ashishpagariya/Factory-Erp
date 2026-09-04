@@ -118,11 +118,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
       <Card className="mb-4">
         <CardTitle tag={<Tag kind="control">Control</Tag>}>Recent Transactions</CardTitle>
         <RecentTransactions
-          jobId={job.id}
-          canEdit={canEdit}
-          issues={issueRows ?? []}
-          materialReturns={materialReturns}
-          dhodiReturns={dhodiReturns}
+  jobId={job.id}
+  canEdit={canEdit}
+  issues={issueRows ?? []}
+  materialReturns={materialReturns}
+  dhodiReturns={dhodiReturns}
+  stoneIssues={(stoneIssueRows ?? []).map((r) => ({ id: r.id, weight: Number(r.weight), created_at: r.created_at }))}
+  stoneReturns={(stoneReturnRows ?? []).map((r) => ({ id: r.id, weight: Number(r.weight), created_at: r.created_at }))}
+/>
         />
         {!isOpen && <div className="text-[11px] text-text-faint mt-3">This job is Settled — its transaction history can no longer be corrected.</div>}
       </Card>

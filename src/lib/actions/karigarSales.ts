@@ -27,3 +27,13 @@ export async function giveKarigarGoldToOffice(): Promise<ActionResult> {
   revalidatePath("/karigar-sales");
   return { ok: true, message: "Accumulated gold handed over to Office." };
 }
+
+export async function correctKarigarGoldSale(saleId: string, grams: number, rate: number): Promise<ActionResult> {
+  const { supabase, userId, role } = await actionContext();
+  const denied = requireRole(role, ["Owner / Admin", "Factory Manager"]);
+  if (denied) return denied;
+  const { error } = await supabase.rpc("fn_correct_karigar_gold_sale", { p_sale_id: saleId, p_new_grams: grams, p_new_rate: rate, p_user: userId });
+  if (error) return { ok: false, message: pgErrorMessage(error) };
+  revalidatePath("/karigar-sales");
+  return { ok: true, message: `${saleId} corrected.` };
+}

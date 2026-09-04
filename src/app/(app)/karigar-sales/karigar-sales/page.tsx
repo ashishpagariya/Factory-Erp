@@ -2,8 +2,8 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { canAccess } from "@/lib/constants";
 import { AccessDenied } from "@/components/AccessDenied";
-import { Card, CardTitle, Tag, Stat, Badge } from "@/components/ui/primitives";
-import { SellGoldForm, GiveToOfficeButton } from "./KarigarSalesClient";
+import { Card, CardTitle, Tag, Stat } from "@/components/ui/primitives";
+import { SellGoldForm, GiveToOfficeButton, SaleRow } from "./KarigarSalesClient";
 import { g } from "@/lib/format";
 import type { Karigar, KarigarGoldSale } from "@/lib/types";
 
@@ -32,6 +32,7 @@ export default async function KarigarSalesPage() {
   const accumulatedAmount = accumulatedRows.reduce((s, r) => s + Number(r.amount), 0);
 
   const canGiveToOffice = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
+  const canEdit = canGiveToOffice;
 
   return (
     <div>
@@ -87,28 +88,19 @@ export default async function KarigarSalesPage() {
                 <th className="text-right">Amount</th>
                 <th>Status</th>
                 <th>When</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {salesRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-text-faint italic py-6">
+                  <td colSpan={8} className="text-center text-text-faint italic py-6">
                     No gold sales recorded yet.
                   </td>
                 </tr>
               )}
               {salesRows.map((r) => (
-                <tr key={r.id}>
-                  <td className="font-mono">{r.id}</td>
-                  <td>{r.karigars?.name}</td>
-                  <td className="num-cell">{g(r.grams)}</td>
-                  <td className="num-cell">₹{Number(r.rate_per_gram).toLocaleString("en-IN")}</td>
-                  <td className="num-cell">₹{Number(r.amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
-                  <td>
-                    <Badge kind={r.status === "Accumulated" ? "pending" : "accepted"}>{r.status === "GivenToOffice" ? "Given to Office" : "Accumulated"}</Badge>
-                  </td>
-                  <td className="text-[11px] text-text-faint">{new Date(r.created_at).toLocaleString()}</td>
-                </tr>
+                <SaleRow key={r.id} sale={r} canEdit={canEdit} />
               ))}
             </tbody>
           </table>
