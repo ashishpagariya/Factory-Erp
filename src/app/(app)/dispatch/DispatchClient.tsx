@@ -21,35 +21,37 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
   const [jobId, setJobId] = useState(jobs[0]?.id ?? "");
   const [pieces, setPieces] = useState("");
   const [purity, setPurity] = useState("91.70");
-  const [gross, setGross] = useState("");
   const [stoneWeight, setStoneWeight] = useState("");
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
   const job = jobs.find((j) => j.id === jobId);
+  // job.wip is the gold-only WIP tracked internally; the physical piece being
+  // shipped also carries whatever Geru colour was added along the way.
+  const physicalGross = job ? job.wip + job.geruAdded : 0;
 
   const preview = useMemo(() => {
-    const g0 = parseFloat(gross);
-    const s0 = parseFloat(stoneWeight);
-    if (!g0 || isNaN(s0) || !job) return null;
-    const net = g0 - s0 - job.geruAdded;
+    if (!job) return null;
+    const s0 = stoneWeight === "" ? 0 : parseFloat(stoneWeight);
+    if (isNaN(s0)) return null;
+    const net = job.wip - s0;
     const stoneDiff = s0 - job.expectedStone;
     return { net, stoneDiff };
-  }, [gross, stoneWeight, job]);
+  }, [stoneWeight, job]);
 
   if (jobs.length === 0) {
     return <p className="text-[12px] text-text-faint">No job currently has finished product ready to dispatch.</p>;
   }
 
   async function submit() {
+    if (!job) return;
     setPending(true);
     try {
-      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), parseFloat(gross), parseFloat(stoneWeight), parseFloat(purity));
+      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), job.wip, parseFloat(stoneWeight || "0"), parseFloat(purity));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
         setPieces("");
-        setGross("");
         setStoneWeight("");
         router.refresh();
       }
@@ -69,16 +71,21 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
           ))}
         </select>
       </Field>
+
       {job && (
-        <div className="text-[11px] text-text-faint mb-2.5 flex gap-4 flex-wrap">
-          <span>
-            Expected stone on this job: <b className="text-text font-mono">{g(job.expectedStone)}</b>
-          </span>
-          <span>
-            Geru added (auto): <b className="text-text font-mono">{g(job.geruAdded)}</b>
-          </span>
+        <div className="bg-surface2 border border-border rounded-lg p-3 mb-3 grid grid-cols-2 gap-y-2 gap-x-3 text-[12.5px]">
+          <div className="text-text-dim">Gross (with Geru)</div>
+          <div className="text-right font-mono font-semibold">{g(physicalGross)}</div>
+          <div className="text-text-dim">Geru Added (auto)</div>
+          <div className="text-right font-mono font-semibold">{g(job.geruAdded)}</div>
+          <div className="text-text-dim">Expected Stone on this Job</div>
+          <div className="text-right font-mono font-semibold">{g(job.expectedStone)}</div>
+          <div className="h-px bg-border-soft col-span-2 my-1" />
+          <div className="text-gold-bright font-semibold">Net Weight to Dispatch</div>
+          <div className="text-right font-mono font-bold text-gold-bright">{preview ? g(preview.net) : "—"}</div>
         </div>
       )}
+
       <div className="flex gap-2.5">
         <div className="flex-1">
           <Field label="Pieces">
@@ -91,33 +98,22 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
           </Field>
         </div>
       </div>
-      <div className="flex gap-2.5">
-        <div className="flex-1">
-          <Field label="Gross (with Geru, g)">
-            <input type="number" step="0.001" value={gross} onChange={(e) => setGross(e.target.value)} />
-          </Field>
-        </div>
-        <div className="flex-1">
-          <Field label="Stone Weight — measured now (g)">
-            <input type="number" step="0.001" value={stoneWeight} onChange={(e) => setStoneWeight(e.target.value)} />
-          </Field>
-        </div>
-      </div>
+
+      <Field label="Stone Weight — measured now (g)">
+        <input type="number" step="0.001" value={stoneWeight} onChange={(e) => setStoneWeight(e.target.value)} placeholder="e.g. 12.500" />
+      </Field>
       {preview && (
-        <div className="text-[13px] font-mono mb-3 space-y-1">
-          <div>
-            Net to Office = {gross} − {stoneWeight} − {job?.geruAdded} = <span className="text-gold-bright font-bold">{g(preview.net)}</span>
-          </div>
-          <div className={Math.abs(preview.stoneDiff) < 0.0005 ? "text-green" : "text-amber"}>
-            Stone difference vs expected: {g(preview.stoneDiff)}
-          </div>
+        <div className={`text-[12px] mb-3 ${Math.abs(preview.stoneDiff) < 0.0005 ? "text-green" : "text-amber"}`}>
+          Stone difference vs expected: {g(preview.stoneDiff)}
         </div>
       )}
-      <Button variant="gold" className="w-full" disabled={pending} onClick={submit}>
+
+      <Button variant="gold" className="w-full" disabled={pending || !job} onClick={submit}>
         Dispatch Finished Goods → Transit
       </Button>
       <div className="text-[11px] text-text-faint mt-2">
-        Tagging &amp; Kramasya sync happen automatically. Net = Gross − Stone − Geru added.
+        Tagging &amp; Kramasya sync happen automatically. Gross shown is the true physical weight (including any Geru
+        colour); Net excludes both Stone and Geru so it reflects gold sent.
       </div>
     </div>
   );
