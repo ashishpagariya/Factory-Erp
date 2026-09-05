@@ -100,7 +100,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <CardTitle tag={<Tag kind="must">Must</Tag>}>Issue Materials / Stones</CardTitle>
           <IssueForm jobId={job.id} factoryBin={factoryBin} disabled={!isOpen} />
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <Stat label="Gold Outstanding With Karigar" value={g(outstandingTotal)} sub="Any material can be returned against this" />
+            <Stat label="Gold Outstanding With Karigar" value={g(Math.max(0, outstandingTotal - s.dhodiNet))} sub="Any material can be returned against this" />
             <Stat
               label="Stone Outstanding With Karigar"
               value={g(stoneOutstanding)}
