@@ -15,30 +15,36 @@ import { Button, Field, Badge } from "@/components/ui/primitives";
 import { g } from "@/lib/format";
 import type { Material } from "@/lib/types";
 
-export type JobWithWip = { id: string; karigarName: string; wip: number; expectedStone: number; geruAdded: number };
+export type JobWithWip = { id: string; karigarName: string; wip: number; expectedNet: number; expectedStone: number; geruAdded: number };
 
 export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
   const [jobId, setJobId] = useState(jobs[0]?.id ?? "");
   const [pieces, setPieces] = useState("");
   const [purity, setPurity] = useState("91.70");
+  const [gross, setGross] = useState("");
   const [stoneWeight, setStoneWeight] = useState("");
   const [pending, setPending] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
   const job = jobs.find((j) => j.id === jobId);
-  // job.wip is the gold-only WIP tracked internally; the physical piece being
-  // shipped also carries whatever Geru colour was added along the way.
-  const physicalGross = job ? job.wip + job.geruAdded : 0;
 
   const preview = useMemo(() => {
     if (!job) return null;
-    const s0 = stoneWeight === "" ? 0 : parseFloat(stoneWeight);
-    if (isNaN(s0)) return null;
-    const net = job.wip - s0;
-    const stoneDiff = s0 - job.expectedStone;
-    return { net, stoneDiff };
-  }, [stoneWeight, job]);
+    const gr = gross === "" ? null : parseFloat(gross);
+    const st = stoneWeight === "" ? null : parseFloat(stoneWeight);
+    if (gr == null || st == null || isNaN(gr) || isNaN(st)) return null;
+
+    const ratio = job.wip > 0.0005 ? Math.min(gr, job.wip) / job.wip : 1;
+    const expectedNetPortion = job.expectedNet * ratio;
+    const expectedStonePortion = job.expectedStone * ratio;
+
+    const taggedNet = gr - st;
+    const netAdjustment = expectedNetPortion - taggedNet;
+    const stoneDiff = st - expectedStonePortion;
+
+    return { taggedNet, netAdjustment, stoneDiff, expectedNetPortion, expectedStonePortion };
+  }, [gross, stoneWeight, job]);
 
   if (jobs.length === 0) {
     return <p className="text-[12px] text-text-faint">No job currently has finished product ready to dispatch.</p>;
@@ -48,10 +54,11 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
     if (!job) return;
     setPending(true);
     try {
-      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), job.wip, parseFloat(stoneWeight || "0"), parseFloat(purity));
+      const res = await dispatchJobFinishedDirect(jobId, parseInt(pieces || "0"), parseFloat(gross), parseFloat(stoneWeight || "0"), parseFloat(purity));
       toast(res.message, res.ok ? "ok" : "err");
       if (res.ok) {
         setPieces("");
+        setGross("");
         setStoneWeight("");
         router.refresh();
       }
@@ -74,15 +81,14 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
 
       {job && (
         <div className="bg-surface2 border border-border rounded-lg p-3 mb-3 grid grid-cols-2 gap-y-2 gap-x-3 text-[12.5px]">
-          <div className="text-text-dim">Gross (with Geru)</div>
-          <div className="text-right font-mono font-semibold">{g(physicalGross)}</div>
-          <div className="text-text-dim">Geru Added (auto)</div>
-          <div className="text-right font-mono font-semibold">{g(job.geruAdded)}</div>
-          <div className="text-text-dim">Expected Stone on this Job</div>
+          <div className="text-text-dim">Expected Gross (pipeline)</div>
+          <div className="text-right font-mono font-semibold">{g(job.wip)}</div>
+          <div className="text-text-dim">Expected Stone</div>
           <div className="text-right font-mono font-semibold">{g(job.expectedStone)}</div>
-          <div className="h-px bg-border-soft col-span-2 my-1" />
-          <div className="text-gold-bright font-semibold">Net Weight to Dispatch</div>
-          <div className="text-right font-mono font-bold text-gold-bright">{preview ? g(preview.net) : "—"}</div>
+          <div className="text-text-dim">Expected Net</div>
+          <div className="text-right font-mono font-semibold">{g(job.expectedNet)}</div>
+          <div className="text-text-dim">Geru Added (informational)</div>
+          <div className="text-right font-mono font-semibold">{g(job.geruAdded)}</div>
         </div>
       )}
 
@@ -98,13 +104,38 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
           </Field>
         </div>
       </div>
+      <div className="flex gap-2.5">
+        <div className="flex-1">
+          <Field label="Gross — measured now (g)">
+            <input type="number" step="0.001" value={gross} onChange={(e) => setGross(e.target.value)} placeholder="e.g. 126.210" />
+          </Field>
+        </div>
+        <div className="flex-1">
+          <Field label="Stone Weight — measured now (g)">
+            <input type="number" step="0.001" value={stoneWeight} onChange={(e) => setStoneWeight(e.target.value)} placeholder="e.g. 12.600" />
+          </Field>
+        </div>
+      </div>
 
-      <Field label="Stone Weight — measured now (g)">
-        <input type="number" step="0.001" value={stoneWeight} onChange={(e) => setStoneWeight(e.target.value)} placeholder="e.g. 12.500" />
-      </Field>
       {preview && (
-        <div className={`text-[12px] mb-3 ${Math.abs(preview.stoneDiff) < 0.0005 ? "text-green" : "text-amber"}`}>
-          Stone difference vs expected: {g(preview.stoneDiff)}
+        <div className="bg-surface2 border border-border rounded-lg p-3 mb-3 text-[12.5px] space-y-1.5">
+          <div className="flex justify-between">
+            <span className="text-text-dim">Tagged Net (Gross − Stone)</span>
+            <span className="font-mono font-semibold">{g(preview.taggedNet)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className={Math.abs(preview.stoneDiff) < 0.0005 ? "text-text-dim" : "text-amber"}>Stone Difference vs Expected</span>
+            <span className={`font-mono ${Math.abs(preview.stoneDiff) < 0.0005 ? "" : "text-amber"}`}>{g(preview.stoneDiff)}</span>
+          </div>
+          <div className="h-px bg-border-soft my-1" />
+          <div className="flex justify-between font-bold">
+            <span className={preview.netAdjustment > 0.0005 ? "text-red" : preview.netAdjustment < -0.0005 ? "text-green" : "text-text-dim"}>
+              {preview.netAdjustment > 0.0005 ? "Loss" : preview.netAdjustment < -0.0005 ? "Profit" : "Net Adjustment"}
+            </span>
+            <span className={`font-mono ${preview.netAdjustment > 0.0005 ? "text-red" : preview.netAdjustment < -0.0005 ? "text-green" : ""}`}>
+              {g(Math.abs(preview.netAdjustment))}
+            </span>
+          </div>
         </div>
       )}
 
@@ -112,8 +143,8 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
         Dispatch Finished Goods → Transit
       </Button>
       <div className="text-[11px] text-text-faint mt-2">
-        Tagging &amp; Kramasya sync happen automatically. Gross shown is the true physical weight (including any Geru
-        colour); Net excludes both Stone and Geru so it reflects gold sent.
+        Tagging &amp; Kramasya sync happen automatically. Both Gross and Stone are your actual measurements — any gap vs
+        the pipeline&apos;s expected figures is recorded as a Profit or Loss.
       </div>
     </div>
   );
@@ -174,7 +205,6 @@ export type PendingFD = {
   tagNo?: string;
   pieces?: number;
   stoneWeight?: number;
-  geruAdded?: number;
 };
 
 export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) {
@@ -187,8 +217,7 @@ export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) 
   const toast = useToast();
   const router = useRouter();
 
-  const editedNetPreview =
-    fd.itemType === "finished" ? parseFloat(editWeight || "0") - parseFloat(editStone || "0") - (fd.geruAdded ?? 0) : null;
+  const editedNetPreview = fd.itemType === "finished" ? parseFloat(editWeight || "0") - parseFloat(editStone || "0") : null;
 
   async function accept() {
     setPending(true);

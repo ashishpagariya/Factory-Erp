@@ -12,6 +12,8 @@ export default async function DispatchPage() {
   const supabase = await createClient();
   const [
     { data: wipBalances },
+    { data: netBalances },
+    { data: stoneBalances },
     { data: jobsRaw },
     { data: factoryBalances },
     { data: pendingFD },
@@ -20,6 +22,8 @@ export default async function DispatchPage() {
     { data: fdItems },
   ] = await Promise.all([
     supabase.from("balances").select("*").eq("location", "DhodiWIP").gt("weight", 0.0005),
+    supabase.from("balances").select("*").eq("location", "DhodiWIPNet"),
+    supabase.from("balances").select("*").eq("location", "DhodiExpectedStone"),
     supabase.from("job_cards").select("id, karigars(name)"),
     supabase.from("balances").select("*").eq("location", "FactoryBin"),
     supabase.from("factory_dispatches").select("*").eq("status", "Pending").order("created_at"),
@@ -31,15 +35,12 @@ export default async function DispatchPage() {
   const jobsById = new Map((jobsRaw ?? []).map((j) => [j.id, j]));
   const wipJobIds = (wipBalances ?? []).filter((b) => jobsById.has(b.ref_id)).map((b) => b.ref_id);
 
-  const [{ data: stoneWipRows }, geruAddedResults] = await Promise.all([
-    wipJobIds.length > 0
-      ? supabase.from("balances").select("*").eq("location", "KarigarStoneWIP").in("ref_id", wipJobIds)
-      : Promise.resolve({ data: [] }),
-    Promise.all(wipJobIds.map((id) => supabase.rpc("fn_job_geru_added", { p_job_id: id }))),
-  ]);
-
+  const netByJob: Record<string, number> = {};
+  (netBalances ?? []).forEach((b) => (netByJob[b.ref_id] = Number(b.weight)));
   const stoneByJob: Record<string, number> = {};
-  (stoneWipRows ?? []).forEach((b) => (stoneByJob[b.ref_id] = Number(b.weight)));
+  (stoneBalances ?? []).forEach((b) => (stoneByJob[b.ref_id] = Number(b.weight)));
+
+  const geruAddedResults = await Promise.all(wipJobIds.map((id) => supabase.rpc("fn_job_geru_added", { p_job_id: id })));
   const geruByJob: Record<string, number> = {};
   wipJobIds.forEach((id, i) => {
     geruByJob[id] = typeof geruAddedResults[i]?.data === "number" ? (geruAddedResults[i].data as number) : 0;
@@ -55,6 +56,7 @@ export default async function DispatchPage() {
         id: b.ref_id,
         karigarName,
         wip: Number(b.weight),
+        expectedNet: netByJob[b.ref_id] ?? 0,
         expectedStone: stoneByJob[b.ref_id] ?? 0,
         geruAdded: geruByJob[b.ref_id] ?? 0,
       };
@@ -72,7 +74,7 @@ export default async function DispatchPage() {
     itemsByDispatch.set(it.dispatch_id, arr);
   });
 
-  const { data: tagsForDetail } = await supabase.from("tags").select("tag_no, pieces, stone_weight, geru_added");
+  const { data: tagsForDetail } = await supabase.from("tags").select("tag_no, pieces, stone_weight");
   const tagDetailByTagNo = new Map((tagsForDetail ?? []).map((t) => [t.tag_no, t]));
 
   function toPendingFD(d: { id: string; category: string }): PendingFD {
@@ -87,7 +89,6 @@ export default async function DispatchPage() {
     let tagNo: string | undefined;
     let pieces: number | undefined;
     let stoneWeight: number | undefined;
-    let geruAdded: number | undefined;
     if (items.length === 1 && items[0].material_id) {
       itemType = "material";
       materialId = items[0].material_id;
@@ -97,10 +98,9 @@ export default async function DispatchPage() {
       const detail = tagDetailByTagNo.get(items[0].tag_no);
       pieces = detail?.pieces ?? 0;
       stoneWeight = detail?.stone_weight != null ? Number(detail.stone_weight) : 0;
-      geruAdded = detail?.geru_added != null ? Number(detail.geru_added) : 0;
     }
 
-    return { id: d.id, category: d.category, grossTotal, netTotal, items: desc, itemType, materialId, tagNo, pieces, stoneWeight, geruAdded };
+    return { id: d.id, category: d.category, grossTotal, netTotal, items: desc, itemType, materialId, tagNo, pieces, stoneWeight };
   }
 
   const canResolve = profile.role === "Owner / Admin";
