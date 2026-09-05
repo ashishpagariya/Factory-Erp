@@ -39,8 +39,8 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
     const expectedNetPortion = job.expectedNet * ratio;
     const expectedStonePortion = job.expectedStone * ratio;
 
-    const taggedNet = gr - st;
-    const netAdjustment = expectedNetPortion - taggedNet;
+   const taggedNet = gr - st - job.geruAdded;
+   const netAdjustment = expectedNetPortion - taggedNet;
     const stoneDiff = st - expectedStonePortion;
 
     return { taggedNet, netAdjustment, stoneDiff, expectedNetPortion, expectedStonePortion };
