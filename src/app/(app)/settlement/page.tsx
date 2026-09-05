@@ -80,7 +80,7 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
         Manufacturing Materials get wastage.
       </p>
       <div className="mb-4">
-        <JobPicker jobs={jobsWithWip as any} current={jobId} />
+        <JobPicker jobs={jobsWithWip} current={jobId} basePath="/settlement" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4">

@@ -14,12 +14,12 @@ function karigarName(k: any): string {
 }
 type JobPickerJob = { id: string; karigars?: any; wip: number };
 
-export function JobPicker({ jobs, current }: { jobs: JobPickerJob[]; current: string | null }) {
+export function JobPicker({ jobs, current, basePath }: { jobs: JobPickerJob[]; current: string | null; basePath: string }) {
   const router = useRouter();
   return (
     <select
       value={current ?? ""}
-      onChange={(e) => router.push(`/polish-geru?job=${e.target.value}`)}
+      onChange={(e) => router.push(`${basePath}?job=${e.target.value}`)}
       className="max-w-[380px]"
     >
       {jobs.length === 0 && <option>No open Job Cards</option>}
