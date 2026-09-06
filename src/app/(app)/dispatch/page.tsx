@@ -154,7 +154,8 @@ const canAccept = profile.role === "Owner / Admin" || profile.role === "Office M
           {(pendingFD ?? []).map((d) => (
   <AcceptRow key={d.id} fd={toPendingFD(d)} canEdit={canEdit} canAccept={canAccept} />
 ))}
-          </table>
+         </tbody>
+         </table>
         </div>
         <div className="text-[11px] text-text-faint mt-2">
           Leave received-weight empty to accept exactly as sent. A different value raises a discrepancy instead of a silent adjustment.
