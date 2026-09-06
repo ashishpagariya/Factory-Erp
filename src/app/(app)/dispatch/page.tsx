@@ -153,7 +153,7 @@ const canAccept = profile.role === "Owner / Admin" || profile.role === "Office M
               )}
           {(pendingFD ?? []).map((d) => (
   <AcceptRow key={d.id} fd={toPendingFD(d)} canEdit={canEdit} canAccept={canAccept} />
-))}>
+))}
           </table>
         </div>
         <div className="text-[11px] text-text-faint mt-2">
