@@ -93,11 +93,11 @@ export function DispatchJobFinishedForm({ jobs }: { jobs: JobWithWip[] }) {
       )}
 
       <div className="flex gap-2.5">
-        <div className="flex-1">
-          <Field label="Pieces">
-            <input type="number" value={pieces} onChange={(e) => setPieces(e.target.value)} placeholder="e.g. 12" />
-          </Field>
-        </div>
+     <div className="flex-1">
+  <Field label="Purity">
+    <input value="91.70% (locked)" disabled />
+  </Field>
+</div>
         <div className="flex-1">
           <Field label="Purity">
             <input type="number" step="0.01" value={purity} onChange={(e) => setPurity(e.target.value)} />
@@ -207,8 +207,9 @@ export type PendingFD = {
   stoneWeight?: number;
 };
 
-export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) {
+export function AcceptRow({ fd, canEdit, canAccept }: { fd: PendingFD; canEdit: boolean; canAccept: boolean }) {
   const [received, setReceived] = useState("");
+  const [receivedStone, setReceivedStone] = useState("");
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editWeight, setEditWeight] = useState(String(fd.grossTotal));
@@ -222,16 +223,17 @@ export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) 
   async function accept() {
     setPending(true);
     try {
+      const stoneVal = fd.itemType === "finished" && receivedStone !== "" ? parseFloat(receivedStone) : null;
       let res;
       if (received === "") {
-        res = await officeAccept(fd.id);
+        res = await officeAccept(fd.id, stoneVal);
       } else {
         const rv = parseFloat(received);
         if (Math.abs(rv - fd.grossTotal) < 0.0005) {
-          res = await officeAccept(fd.id);
+          res = await officeAccept(fd.id, stoneVal);
         } else {
           const reason = window.prompt("Received weight differs from what was dispatched. Reason for discrepancy:", "Scale variance") || "Not specified";
-          res = await officeAcceptWithDiscrepancy(fd.id, rv, reason);
+          res = await officeAcceptWithDiscrepancy(fd.id, rv, reason, stoneVal);
         }
       }
       toast(res.message, res.ok ? "ok" : "err");
@@ -270,19 +272,37 @@ export function AcceptRow({ fd, canEdit }: { fd: PendingFD; canEdit: boolean }) 
         <td className="num-cell">{g(fd.grossTotal)}</td>
         <td className="num-cell">{fd.netTotal != null ? g(fd.netTotal) : "—"}</td>
         <td>
-          <input
-            type="number"
-            step="0.001"
-            value={received}
-            onChange={(e) => setReceived(e.target.value)}
-            placeholder={String(fd.grossTotal)}
-            className="w-[120px]"
-          />
+          {canAccept ? (
+            <div className="flex flex-col gap-1">
+              <input
+                type="number"
+                step="0.001"
+                value={received}
+                onChange={(e) => setReceived(e.target.value)}
+                placeholder={`Gross: ${fd.grossTotal}`}
+                className="w-[130px]"
+              />
+              {fd.itemType === "finished" && (
+                <input
+                  type="number"
+                  step="0.001"
+                  value={receivedStone}
+                  onChange={(e) => setReceivedStone(e.target.value)}
+                  placeholder="Stone weight"
+                  className="w-[130px]"
+                />
+              )}
+            </div>
+          ) : (
+            <span className="text-[11px] text-text-faint">Office Manager only</span>
+          )}
         </td>
         <td className="flex gap-1.5">
-          <Button size="sm" variant="gold" disabled={pending} onClick={accept}>
-            Accept
-          </Button>
+          {canAccept && (
+            <Button size="sm" variant="gold" disabled={pending} onClick={accept}>
+              Accept
+            </Button>
+          )}
           {editable && (
             <Button size="sm" onClick={() => setEditing((e) => !e)}>
               {editing ? "Cancel" : "Edit"}

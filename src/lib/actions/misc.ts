@@ -46,11 +46,11 @@ export async function factoryDispatchMaterial(materialId: string, weight: number
   return { ok: true, message: `${data} posted. ${weight} g moved to Transit.`, data: { id: data as string } };
 }
 
-export async function officeAccept(dispatchId: string): Promise<ActionResult> {
+export async function officeAccept(dispatchId: string, receivedStone: number | null): Promise<ActionResult> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, ["Owner / Admin", "Office Manager"]);
   if (denied) return denied;
-  const { error } = await supabase.rpc("fn_office_accept", { p_dispatch_id: dispatchId, p_user: userId });
+  const { error } = await supabase.rpc("fn_office_accept", { p_dispatch_id: dispatchId, p_user: userId, p_received_stone: receivedStone });
   if (error) return { ok: false, message: pgErrorMessage(error) };
   revalidatePath("/dispatch");
   return { ok: true, message: `${dispatchId} accepted into Office Stock.` };
@@ -59,7 +59,8 @@ export async function officeAccept(dispatchId: string): Promise<ActionResult> {
 export async function officeAcceptWithDiscrepancy(
   dispatchId: string,
   receivedGross: number,
-  reason: string
+  reason: string,
+  receivedStone: number | null
 ): Promise<ActionResult> {
   const { supabase, userId, role } = await actionContext();
   const denied = requireRole(role, ["Owner / Admin", "Office Manager"]);
@@ -69,6 +70,7 @@ export async function officeAcceptWithDiscrepancy(
     p_received_gross: receivedGross,
     p_reason: reason,
     p_user: userId,
+    p_received_stone: receivedStone,
   });
   if (error) return { ok: false, message: pgErrorMessage(error) };
   revalidatePath("/dispatch");

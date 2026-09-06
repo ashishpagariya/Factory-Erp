@@ -21,7 +21,7 @@ export default async function DispatchPage() {
     { data: acceptedFD },
     { data: fdItems },
   ] = await Promise.all([
-    supabase.from("balances").select("*").eq("location", "DhodiWIP").gt("weight", 0.0005),
+    supabase.from("balances").select("*").eq("location", "DhodiWIP").gt("weight", 0.05),
     supabase.from("balances").select("*").eq("location", "DhodiWIPNet"),
     supabase.from("balances").select("*").eq("location", "DhodiExpectedStone"),
     supabase.from("job_cards").select("id, karigars(name)"),
@@ -103,8 +103,9 @@ export default async function DispatchPage() {
     return { id: d.id, category: d.category, grossTotal, netTotal, items: desc, itemType, materialId, tagNo, pieces, stoneWeight };
   }
 
-  const canResolve = profile.role === "Owner / Admin";
-  const canEdit = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
+const canResolve = profile.role === "Owner / Admin";
+const canEdit = profile.role === "Owner / Admin" || profile.role === "Factory Manager";
+const canAccept = profile.role === "Owner / Admin" || profile.role === "Office Manager";
 
   return (
     <div>
@@ -150,10 +151,9 @@ export default async function DispatchPage() {
                   </td>
                 </tr>
               )}
-              {(pendingFD ?? []).map((d) => (
-                <AcceptRow key={d.id} fd={toPendingFD(d)} canEdit={canEdit} />
-              ))}
-            </tbody>
+          {(pendingFD ?? []).map((d) => (
+  <AcceptRow key={d.id} fd={toPendingFD(d)} canEdit={canEdit} canAccept={canAccept} />
+))}>
           </table>
         </div>
         <div className="text-[11px] text-text-faint mt-2">
